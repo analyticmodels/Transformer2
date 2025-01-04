@@ -1,0 +1,6 @@
+Batch size: 32-64 
+Sequence length: 512
+Model dimension (d_model): 256
+Number of heads: 8
+Number of layers: 6
+Feed-forward dimension: 1024
