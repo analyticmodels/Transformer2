@@ -1,66 +1,203 @@
-import torch
+from torch.optim.lr_scheduler import LambdaLR
 import torch.nn as nn
+import torch
 import math
-from transformers import get_cosine_schedule_with_warmup
 from tqdm import tqdm
+import torch.cuda.amp as amp
 
-def train_model(model, train_loader, val_loader, num_epochs=30, patience=3):
+def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5):
+    def lr_lambda(current_step):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+    return LambdaLR(optimizer, lr_lambda)
+
+# Updated training configuration
+def train_model(model, train_loader, val_loader, num_epochs=50, patience=5, 
+                accumulation_steps=16, max_grad_norm=0.5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
-    # Basic training setup with conservative values
+    # Calculate total steps
+    total_steps = (len(train_loader) // accumulation_steps) * num_epochs
+    
+    # Improved optimizer settings
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=1e-4,
-        betas=(0.9, 0.98),
-        eps=1e-6,
+        betas=(0.9, 0.999),
+        eps=1e-8,
         weight_decay=0.01
     )
     
-    criterion = nn.CrossEntropyLoss(ignore_index=-100)
+    # Learning rate scheduler with longer warmup
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=total_steps // 5,  # 20% warmup
+        num_training_steps=total_steps,
+        num_cycles=0.5
+    )
     
-    print("Testing forward pass...")
-    # Test forward pass with a single batch
-    for batch in train_loader:
-        input_ids = batch['input_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
-        labels = batch['labels'].to(device)
-        
-        outputs = model(input_ids, attention_mask)
-        loss = criterion(outputs.view(-1, outputs.size(-1)), labels.view(-1))
-        print(f"Initial loss: {loss.item()}")
-        break
+    # Loss function with label smoothing
+    criterion = nn.CrossEntropyLoss(ignore_index=-100, label_smoothing=0.1)
+    scaler = torch.amp.GradScaler('cuda')  # For mixed precision training
     
-    # If we get here without errors, start training
-    print("\nStarting training...")
-    for epoch in range(num_epochs):
-        model.train()
-        total_loss = 0
-        
-        for batch in tqdm(train_loader):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
-            
+    best_val_loss = float('inf')
+    patience_counter = 0
+    
+    # Training metrics tracking
+    train_losses = []
+    val_losses = []
+    
+    print(f"Starting training on {device}")
+    print(f"Number of batches: {len(train_loader)}")
+    print(f"Accumulation steps: {accumulation_steps}")
+    print(f"Effective batch size: {train_loader.batch_size * accumulation_steps}")
+    
+    try:
+        for epoch in range(num_epochs):
+            model.train()
+            total_loss = 0
             optimizer.zero_grad()
-            outputs = model(input_ids, attention_mask)
-            loss = criterion(outputs.view(-1, outputs.size(-1)), labels.view(-1))
             
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+            progress_bar = tqdm(enumerate(train_loader), 
+                              total=len(train_loader),
+                              desc=f"Epoch {epoch+1}/{num_epochs}")
             
-            total_loss += loss.item()
+            # Training loop
+            for batch_idx, batch in progress_bar:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+                
+                # Mixed precision training
+                with torch.amp.autocast('cuda'):
+                    outputs = model(input_ids, attention_mask)
+                    loss = criterion(outputs.view(-1, outputs.size(-1)), labels.view(-1))
+                    loss = loss / accumulation_steps
+                
+                # Backward pass with gradient scaling
+                scaler.scale(loss).backward()
+                
+                if (batch_idx + 1) % accumulation_steps == 0:
+                    # Gradient clipping
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                    
+                    # Optimizer step with gradient scaling
+                    scaler.step(optimizer)
+                    scaler.update()
+                    scheduler.step()
+                    optimizer.zero_grad()
+                
+                total_loss += loss.item() * accumulation_steps
+                
+                # Update progress bar
+                current_lr = scheduler.get_last_lr()[0]
+                progress_bar.set_postfix({
+                    'loss': f"{total_loss/(batch_idx+1):.4f}",
+                    'lr': f"{current_lr:.2e}"
+                })
             
-        avg_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
-        
-        # Save checkpoint
+            avg_train_loss = total_loss / len(train_loader)
+            train_losses.append(avg_train_loss)
+            
+            # Validation loop
+            model.eval()
+            val_loss = 0
+            with torch.no_grad():
+                for batch in tqdm(val_loader, desc="Validating"):
+                    input_ids = batch['input_ids'].to(device)
+                    attention_mask = batch['attention_mask'].to(device)
+                    labels = batch['labels'].to(device)
+                    
+                    outputs = model(input_ids, attention_mask)
+                    loss = criterion(outputs.view(-1, outputs.size(-1)), labels.view(-1))
+                    val_loss += loss.item()
+            
+            avg_val_loss = val_loss / len(val_loader)
+            val_losses.append(avg_val_loss)
+            
+            print(f'\nEpoch {epoch+1}:')
+            print(f'Average training loss: {avg_train_loss:.4f}')
+            print(f'Average validation loss: {avg_val_loss:.4f}')
+            print(f'Learning rate: {current_lr:.2e}')
+            
+            # Early stopping and model saving
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                patience_counter = 0
+                print("Saving best model...")
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'loss': best_val_loss,
+                    'train_losses': train_losses,
+                    'val_losses': val_losses,
+                    'scaler_state_dict': scaler.state_dict(),
+                }, 'best_model.pt')
+            else:
+                patience_counter += 1
+                if patience_counter >= patience:
+                    print(f'Early stopping triggered after {epoch+1} epochs')
+                    break
+            
+            # Save checkpoint every 5 epochs
+            if (epoch + 1) % 5 == 0:
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'loss': avg_val_loss,
+                    'train_losses': train_losses,
+                    'val_losses': val_losses,
+                    'scaler_state_dict': scaler.state_dict(),
+                }, f'checkpoint_epoch_{epoch+1}.pt')
+                
+    except KeyboardInterrupt:
+        print("Training interrupted by user. Saving checkpoint...")
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            'loss': avg_loss,
-        }, 'checkpoint.pt')
+            'scheduler_state_dict': scheduler.state_dict(),
+            'loss': avg_val_loss,
+            'train_losses': train_losses,
+            'val_losses': val_losses,
+            'scaler_state_dict': scaler.state_dict(),
+        }, 'interrupted_checkpoint.pt')
+        
+    except Exception as e:
+        print(f"Training interrupted by error: {str(e)}")
+        import traceback
+        traceback.print_exc()
     
-    return model
+    return model, train_losses, val_losses
+
+# Usage
+if __name__ == "__main__":
+    num_epochs = 30
+    train_loader, val_loader, tokenizer = get_dataloaders(batch_size=8)
+    
+    model = SmallTransformer(
+        vocab_size=tokenizer.get_vocab_size(),
+        d_model=256,
+        num_heads=8,
+        num_layers=6,
+        d_ff=1024,
+        max_seq_len=512,
+        dropout=0.1
+    )
+    
+    model, train_losses, val_losses = train_model(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        num_epochs=num_epochs,
+        patience=3,
+        accumulation_steps=8  # Adjust based on your GPU memory
+    )
