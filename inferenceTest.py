@@ -126,24 +126,24 @@ if __name__ == "__main__":
     # Different parameter sets to try
     sampling_params = [
         {
-            "temperature": 0.7,
-            "top_k": 50,
-            "top_p": 0.9,
-            "repetition_penalty": 1.2,
+            "temperature": 0.6,         # More conservative temperature
+            "top_k": 100,              # Larger top-k
+            "top_p": 0.95,             # Higher top-p
+            "repetition_penalty": 1.5,  # Stronger repetition penalty
             "max_new_tokens": 50
         },
         {
-            "temperature": 0.9,
-            "top_k": 40,
-            "top_p": 0.85,
-            "repetition_penalty": 1.3,
+            "temperature": 0.7,
+            "top_k": 80,
+            "top_p": 0.92,
+            "repetition_penalty": 1.4,
             "max_new_tokens": 50
         },
         {
             "temperature": 0.8,
-            "top_k": 30,
-            "top_p": 0.8,
-            "repetition_penalty": 1.4,
+            "top_k": 60,
+            "top_p": 0.9,
+            "repetition_penalty": 1.3,
             "max_new_tokens": 50
         }
     ]
