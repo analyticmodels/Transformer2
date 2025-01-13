@@ -5,28 +5,10 @@ def test_inference(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
                   top_k=50, top_p=0.9, repetition_penalty=1.2):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Load model with better error handling
+    # Load model
     try:
         checkpoint = torch.load('best_model.pt', weights_only=True)
-        # Check if we have the expected keys
-        if 'model_state_dict' in checkpoint:
-            state_dict = checkpoint['model_state_dict']
-        else:
-            state_dict = checkpoint  # Try using checkpoint directly
-            
-        # Remove any unexpected keys
-        model_dict = model.state_dict()
-        state_dict = {k: v for k, v in state_dict.items() 
-                     if k in model_dict and v.shape == model_dict[k].shape}
-        
-        # Load the filtered state dict
-        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-        
-        if missing_keys:
-            print(f"Warning: Missing keys in state dict: {missing_keys}")
-        if unexpected_keys:
-            print(f"Warning: Unexpected keys in state dict: {unexpected_keys}")
-            
+        model.load_state_dict(checkpoint['model_state_dict'], strict=False)  # Allow missing keys
         print("Model loaded successfully!")
     except Exception as e:
         print(f"Error loading model: {e}")
@@ -35,85 +17,53 @@ def test_inference(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
     model = model.to(device)
     model.eval()
     
-    try:
-        # Encode prompt with error checking
-        encoding = tokenizer.encode(prompt)
-        input_ids = torch.tensor(encoding['input_ids'], dtype=torch.long).unsqueeze(0).to(device)
-        attention_mask = torch.tensor(encoding['attention_mask'], dtype=torch.long).unsqueeze(0).to(device)
-        
-        # Track generated tokens for repetition penalty
-        generated = list(input_ids[0].cpu().numpy())
-        
-        with torch.no_grad():
-            for _ in range(max_new_tokens):
-                try:
-                    # Forward pass with size checks
-                    if input_ids.size(1) > model.max_seq_len:
-                        input_ids = input_ids[:, -model.max_seq_len:]
-                        attention_mask = attention_mask[:, -model.max_seq_len:]
-                    
-                    outputs = model(input_ids, attention_mask)
-                    next_token_logits = outputs[:, -1, :].float()  # Ensure float type
-                    
-                    # Apply repetition penalty
-                    for token in set(generated[-50:]):  # Only consider last 50 tokens
-                        next_token_logits[0, token] /= repetition_penalty
-                    
-                    # Apply temperature with stability check
-                    next_token_logits = next_token_logits / max(temperature, 1e-8)
-                    
-                    # Apply top-k filtering
-                    top_k = min(top_k, next_token_logits.size(-1))
-                    indices_to_remove = next_token_logits < torch.topk(next_token_logits, top_k)[0][..., -1, None]
-                    next_token_logits[indices_to_remove] = float('-inf')
-                    
-                    # Apply top-p filtering
-                    sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True)
-                    cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
-                    sorted_indices_to_remove = cumulative_probs > top_p
-                    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-                    sorted_indices_to_remove[..., 0] = 0
-                    indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
-                    next_token_logits[indices_to_remove] = float('-inf')
-                    
-                    # Sample next token
-                    probs = torch.softmax(next_token_logits, dim=-1)
-                    next_token = torch.multinomial(probs[0], 1)
-                    
-                    # Early stopping checks
-                    if next_token.item() == tokenizer.get_pad_token_id():
-                        break
-                    
-                    # Update input tensors
-                    input_ids = torch.cat([input_ids, next_token.unsqueeze(0)], dim=1)
-                    attention_mask = torch.cat([
-                        attention_mask,
-                        torch.ones((1, 1), dtype=torch.long, device=device)
-                    ], dim=1)
-                    
-                    generated.append(next_token.item())
-                    
-                    # Check for repetition
-                    if len(generated) > 4:
-                        last_tokens = generated[-4:]
-                        if len(set(last_tokens)) == 1:
-                            break
-                    
-                except RuntimeError as e:
-                    print(f"Error during generation step: {e}")
-                    break
+    # Clean tokenization
+    encoding = tokenizer.encode(prompt)
+    input_ids = torch.tensor(encoding['input_ids'], dtype=torch.long).unsqueeze(0).to(device)
+    attention_mask = torch.ones_like(input_ids).to(device)
+    
+    generated_tokens = []
+    
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            outputs = model(input_ids, attention_mask)
+            next_token_logits = outputs[:, -1, :]
             
-            # Decode with error handling
-            try:
-                generated_tokens = generated[len(encoding['input_ids']):]
-                return tokenizer.decode(generated_tokens)
-            except Exception as e:
-                print(f"Error decoding tokens: {e}")
-                return ""
+            # Filter special tokens except EOS
+            for token_id in tokenizer.all_special_ids:
+                if token_id != tokenizer.eos_token_id:
+                    next_token_logits[:, token_id] = float('-inf')
+            
+            # Apply repetition penalty
+            for token in set(generated_tokens):
+                next_token_logits[0, token] /= repetition_penalty
+            
+            # Temperature and top-k/p sampling
+            next_token_logits = next_token_logits / temperature
+            next_token_probs = torch.softmax(next_token_logits, dim=-1)
+            
+            # Filter with top-k and top-p
+            top_k_probs, top_k_indices = torch.topk(next_token_probs, min(top_k, next_token_probs.size(-1)))
+            cumulative_probs = torch.cumsum(top_k_probs, dim=-1)
+            remove_indices = cumulative_probs > top_p
+            remove_indices[..., 1:] = remove_indices[..., :-1].clone()
+            remove_indices[..., 0] = 0
+            top_k_probs[remove_indices] = 0.0
+            top_k_probs = top_k_probs / top_k_probs.sum(dim=-1, keepdim=True)
+            
+            next_token = top_k_indices[0, torch.multinomial(top_k_probs[0], 1)]
+            
+            if next_token == tokenizer.eos_token_id:
+                break
                 
-    except Exception as e:
-        print(f"Error during inference: {e}")
-        return ""
+            generated_tokens.append(next_token.item())
+            input_ids = torch.cat([input_ids, next_token.unsqueeze(0).unsqueeze(0)], dim=1)
+            attention_mask = torch.cat([attention_mask, torch.ones((1, 1), dtype=torch.long, device=device)], dim=1)
+    
+    try:
+        return tokenizer.decode(generated_tokens)
+    except:
+        return "[Error decoding tokens]"
 
 # Test with different parameters
 if __name__ == "__main__":

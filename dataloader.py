@@ -57,20 +57,67 @@ class TransformerDataset(Dataset):
             'labels': self.labels[idx]
         }
 
-def get_dataloaders(batch_size=32, max_length=512, tokenizer_type="byte-level-bpe"):
-    # Create tokenizer
-    tokenizer = create_tokenizer(tokenizer_type)
+def get_dataloaders(batch_size=32, max_length=512):
+    # Load IMDB dataset
+    dataset = load_dataset("imdb")
     
-    # Load dataset
-    dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
+    # Initialize tokenizer
+    tokenizer = ByteLevelBPETokenizer()
     
-    # Process datasets
-    train_texts = [text for text in dataset['train']['text'] if text.strip()]
-    val_texts = [text for text in dataset['validation']['text'] if text.strip()]
+    # Create vocabulary from IMDB data
+    def batch_iterator():
+        for i in range(0, len(dataset['train']), 1000):
+            yield dataset['train'][i:i + 1000]['text']
+    
+    # Train tokenizer on IMDB data
+    tokenizer.train_from_iterator(
+        batch_iterator(),
+        vocab_size=50000,
+        min_frequency=2,
+        special_tokens=["<s>", "</s>", "<pad>", "<unk>"]
+    )
+    
+    # Save tokenizer
+    os.makedirs("tokenizer", exist_ok=True)
+    tokenizer.save_model("tokenizer")
+    
+    class IMDBDataset(Dataset):
+        def __init__(self, data, tokenizer, max_length):
+            self.texts = data['text']
+            self.tokenizer = tokenizer
+            self.max_length = max_length
+        
+        def __len__(self):
+            return len(self.texts)
+        
+        def __getitem__(self, idx):
+            text = self.texts[idx]
+            encoding = self.tokenizer.encode(text)
+            
+            # Ensure proper padding and truncation
+            input_ids = torch.tensor(encoding.ids[:self.max_length], dtype=torch.long)
+            attention_mask = torch.ones_like(input_ids)
+            
+            # Pad if necessary
+            if len(input_ids) < self.max_length:
+                padding_length = self.max_length - len(input_ids)
+                input_ids = torch.cat([input_ids, torch.zeros(padding_length, dtype=torch.long)])
+                attention_mask = torch.cat([attention_mask, torch.zeros(padding_length, dtype=torch.long)])
+            
+            # Create shifted labels for language modeling
+            labels = input_ids.clone()
+            labels[:-1] = input_ids[1:]
+            labels[-1] = -100
+            
+            return {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask,
+                'labels': labels
+            }
     
     # Create datasets
-    train_dataset = TransformerDataset(train_texts, tokenizer, max_length)
-    val_dataset = TransformerDataset(val_texts, tokenizer, max_length)
+    train_dataset = IMDBDataset(dataset['train'], tokenizer, max_length)
+    val_dataset = IMDBDataset(dataset['test'], tokenizer, max_length)
     
     # Create dataloaders
     train_loader = DataLoader(
@@ -90,20 +137,3 @@ def get_dataloaders(batch_size=32, max_length=512, tokenizer_type="byte-level-bp
     )
     
     return train_loader, val_loader, tokenizer
-
-if __name__ == "__main__":
-    # Test with different tokenizer types
-    for tokenizer_type in ["byte-level-bpe", "gpt2"]:
-        print(f"\nTesting with {tokenizer_type} tokenizer...")
-        train_loader, val_loader, tokenizer = get_dataloaders(
-            batch_size=8,
-            tokenizer_type=tokenizer_type
-        )
-        
-        print("Checking first batch...")
-        for batch in train_loader:
-            print(f"Input IDs shape: {batch['input_ids'].shape}")
-            print(f"Attention mask shape: {batch['attention_mask'].shape}")
-            print(f"Labels shape: {batch['labels'].shape}")
-            print(f"Vocab size: {tokenizer.get_vocab_size()}")
-            break
