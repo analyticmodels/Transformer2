@@ -76,34 +76,110 @@ def train_byte_level_tokenizer(dataset_type, vocab_size=50000, min_frequency=2):
     Train a Byte-Level BPE tokenizer on the specified dataset.
 
     Args:
-        dataset_type (str): The type of dataset to load (e.g., "wikitext", "bluesky").
+        dataset_type (str): The type of dataset to load (e.g., "wikitext", "bluesky", "reddit").
         vocab_size (int): The size of the vocabulary.
         min_frequency (int): The minimum frequency for a token to be included in the vocabulary.
 
     Returns:
         ByteLevelBPETokenizer: The trained tokenizer.
     """
+    import pandas as pd
+    
+    # Create the output directory
+    os.makedirs("tokenizer", exist_ok=True)
+    training_data_path = "tokenizer/training_data.txt"
+    
     # Load the dataset based on the dataset_type
-    if dataset_type == "wikitext":
+    if dataset_type == "bluesky":
+        # Check if the bluesky data file exists
+        bluesky_path = "data/bluesky_posts.parquet"
+        if os.path.exists(bluesky_path):
+            print(f"Loading Bluesky data from {bluesky_path}")
+            df = pd.read_parquet(bluesky_path)
+            
+            # Extract text data from dataframe
+            with open(training_data_path, "w", encoding="utf-8") as f:
+                # The text column in the Bluesky dataset is called 'text'
+                for text in df['text']:
+                    if text and text.strip():  # Skip empty lines
+                        f.write(text + "\n")
+            
+            print(f"Saved {len(df)} Bluesky posts to {training_data_path}")
+        else:
+            print(f"Bluesky data file not found at {bluesky_path}")
+            print("Falling back to wikitext dataset")
+            dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
+            text_field = "text"
+            
+            # Write the dataset text to the training data file
+            with open(training_data_path, "w", encoding="utf-8") as f:
+                for item in dataset:
+                    text = item[text_field]
+                    if text and text.strip():  # Skip empty lines
+                        f.write(text + "\n")
+    
+    elif dataset_type == "reddit":
+        # Check if the reddit data file exists
+        reddit_path = "data/reddit_posts.parquet"
+        if os.path.exists(reddit_path):
+            print(f"Loading Reddit data from {reddit_path}")
+            df = pd.read_parquet(reddit_path)
+            
+            # Extract text data from dataframe
+            with open(training_data_path, "w", encoding="utf-8") as f:
+                # The text column in the Reddit dataset is called 'combined_text'
+                for text in df['combined_text']:
+                    if text and text.strip():  # Skip empty lines
+                        f.write(text + "\n")
+            
+            print(f"Saved {len(df)} Reddit posts to {training_data_path}")
+        else:
+            print(f"Reddit data file not found at {reddit_path}")
+            print("Falling back to wikitext dataset")
+            dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
+            text_field = "text"
+            
+            # Write the dataset text to the training data file
+            with open(training_data_path, "w", encoding="utf-8") as f:
+                for item in dataset:
+                    text = item[text_field]
+                    if text and text.strip():  # Skip empty lines
+                        f.write(text + "\n")
+    
+    elif dataset_type == "wikitext":
         dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
         text_field = "text"
+        
+        # Write the dataset text to the training data file
+        with open(training_data_path, "w", encoding="utf-8") as f:
+            for item in dataset:
+                text = item[text_field]
+                if text and text.strip():  # Skip empty lines
+                    f.write(text + "\n")
+    
     elif dataset_type == "imdb":
         dataset = load_dataset("imdb", split="train")
         text_field = "text"
+        
+        # Write the dataset text to the training data file
+        with open(training_data_path, "w", encoding="utf-8") as f:
+            for item in dataset:
+                text = item[text_field]
+                if text and text.strip():  # Skip empty lines
+                    f.write(text + "\n")
+    
     else:
         # Use a default dataset if the requested one isn't available
         print(f"Dataset type {dataset_type} not directly supported. Using wikitext as fallback.")
         dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
         text_field = "text"
-
-    # Write the dataset text to a temporary file for tokenizer training
-    os.makedirs("tokenizer", exist_ok=True)
-    training_data_path = "tokenizer/training_data.txt"
-    with open(training_data_path, "w", encoding="utf-8") as f:
-        for item in dataset:
-            text = item[text_field]
-            if text and text.strip():  # Skip empty lines
-                f.write(text + "\n")
+        
+        # Write the dataset text to the training data file
+        with open(training_data_path, "w", encoding="utf-8") as f:
+            for item in dataset:
+                text = item[text_field]
+                if text and text.strip():  # Skip empty lines
+                    f.write(text + "\n")
 
     # Initialize and train the Byte-Level BPE tokenizer
     tokenizer = ByteLevelBPETokenizer()
@@ -179,10 +255,12 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Prepare tokenizer for transformer model")
-    parser.add_argument('--dataset_type', type=str, default='bluesky',
-                       help='Dataset to use for tokenizer training (wikitext, imdb)')
-    parser.add_argument('--vocab_size', type=int, default=500000,
+    parser.add_argument('--dataset_type', type=str, default='bluesky', choices=['bluesky', 'reddit', 'wikitext', 'imdb'],
+                       help='Dataset to use for tokenizer training (bluesky, reddit, wikitext, imdb)')
+    parser.add_argument('--vocab_size', type=int, default=50000,
                        help='Vocabulary size for the tokenizer')
+    parser.add_argument('--min_frequency', type=int, default=2,
+                       help='Minimum frequency for a token to be included in vocabulary')
     
     args = parser.parse_args()
     
@@ -192,10 +270,15 @@ if __name__ == "__main__":
     if not os.path.exists("tokenizer/training_data.txt"):
         print("Creating tokenizer training data...")
         # Load and prepare dataset for tokenizer training
-        train_byte_level_tokenizer(args.dataset_type, vocab_size=args.vocab_size)
+        train_byte_level_tokenizer(args.dataset_type, vocab_size=args.vocab_size, min_frequency=args.min_frequency)
     
     # Now create the tokenizer
-    tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type=args.dataset_type)
+    tokenizer = create_tokenizer(
+        tokenizer_type="byte-level-bpe", 
+        dataset_type=args.dataset_type,
+        vocab_size=args.vocab_size,
+        min_frequency=args.min_frequency
+    )
     
     # Test the tokenizer
     prompt = "Hello, how are you?"
