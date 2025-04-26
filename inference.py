@@ -39,9 +39,18 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
     
     # Load model weights
     try:
-        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
-        model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-        print(f"Model loaded successfully from {model_path}")
+        # First try loading with weights_only=True which is safer
+        try:
+            checkpoint = torch.load(model_path, map_location=device, weights_only=True)
+            model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+            print(f"Model loaded successfully from {model_path}")
+        except Exception as e:
+            print(f"Error loading with weights_only=True: {e}")
+            print("Falling back to weights_only=False for compatibility...")
+            # Fall back to weights_only=False if the above fails
+            checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+            model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+            print(f"Model loaded successfully from {model_path} using weights_only=False")
     except Exception as e:
         print(f"Error loading model: {e}")
     
