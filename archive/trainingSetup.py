@@ -180,24 +180,63 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
 
 # Usage
 if __name__ == "__main__":
-    num_epochs = 30
-    train_loader, val_loader, tokenizer = get_dataloaders(batch_size=8)
+    import argparse
+    from coreTransformer import SmallTransformer
+    from dataloader import get_dataloaders
     
-    model = SmallTransformer(
-        vocab_size=tokenizer.get_vocab_size(),
-        d_model=256,
-        num_heads=8,
-        num_layers=6,
-        d_ff=1024,
-        max_seq_len=512,
-        dropout=0.1
+    parser = argparse.ArgumentParser(description='Train transformer model on text data')
+    parser.add_argument('--dataset', type=str, default='reddit', choices=['imdb', 'reddit', 'bluesky'],
+                        help='Dataset to use for training (default: reddit)')
+    parser.add_argument('--batch_size', type=int, default=8,
+                        help='Batch size for training (default: 8)')
+    parser.add_argument('--epochs', type=int, default=30,
+                        help='Number of epochs to train for (default: 30)')
+    parser.add_argument('--patience', type=int, default=3,
+                        help='Patience for early stopping (default: 3)')
+    parser.add_argument('--accumulation_steps', type=int, default=8,
+                        help='Gradient accumulation steps (default: 8)')
+    parser.add_argument('--max_length', type=int, default=512,
+                        help='Maximum sequence length (default: 512)')
+    parser.add_argument('--d_model', type=int, default=256,
+                        help='Model dimension (default: 256)')
+    parser.add_argument('--num_heads', type=int, default=8,
+                        help='Number of attention heads (default: 8)')
+    parser.add_argument('--num_layers', type=int, default=6,
+                        help='Number of transformer layers (default: 6)')
+    parser.add_argument('--d_ff', type=int, default=1024,
+                        help='Feed-forward dimension (default: 1024)')
+    parser.add_argument('--dropout', type=float, default=0.1,
+                        help='Dropout rate (default: 0.1)')
+    
+    args = parser.parse_args()
+    
+    print(f"Training on {args.dataset} dataset")
+    print(f"Model configuration: d_model={args.d_model}, num_heads={args.num_heads}, num_layers={args.num_layers}")
+    
+    # Load data
+    train_loader, val_loader, tokenizer = get_dataloaders(
+        batch_size=args.batch_size,
+        max_length=args.max_length,
+        dataset_type=args.dataset
     )
     
+    # Create model
+    model = SmallTransformer(
+        vocab_size=tokenizer.get_vocab_size(),
+        d_model=args.d_model,
+        num_heads=args.num_heads,
+        num_layers=args.num_layers,
+        d_ff=args.d_ff,
+        max_seq_len=args.max_length,
+        dropout=args.dropout
+    )
+    
+    # Train model
     model, train_losses, val_losses = train_model(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        num_epochs=num_epochs,
-        patience=3,
-        accumulation_steps=8  # Adjust based on your GPU memory
+        num_epochs=args.epochs,
+        patience=args.patience,
+        accumulation_steps=args.accumulation_steps
     )

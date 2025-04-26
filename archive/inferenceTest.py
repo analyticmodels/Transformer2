@@ -24,14 +24,35 @@ def test_inference(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
     
     generated_tokens = []
     
+    # Define special tokens based on tokenizer type
+    special_tokens = []
+    eos_token_id = None
+    
+    # Check if tokenizer has all_special_ids attribute (HuggingFace tokenizers)
+    if hasattr(tokenizer, 'all_special_ids'):
+        special_tokens = tokenizer.all_special_ids
+        eos_token_id = tokenizer.eos_token_id
+    else:
+        # For ByteLevelBPETokenizerWrapper, we'll use some defaults
+        # Typically special tokens are in the beginning of the vocabulary
+        special_tokens = list(range(4))  # Assuming first 4 tokens are special
+        eos_token_id = 2  # </s> is often token 2
+    
     with torch.no_grad():
         for _ in range(max_new_tokens):
             outputs = model(input_ids, attention_mask)
-            next_token_logits = outputs[:, -1, :]
+            
+            # Handle different output formats
+            if len(outputs.shape) == 3:  # [batch_size, seq_len, vocab_size]
+                next_token_logits = outputs[:, -1, :]
+            elif len(outputs.shape) == 2:  # [batch_size, vocab_size]
+                next_token_logits = outputs
+            else:
+                raise ValueError(f"Unexpected output shape: {outputs.shape}")
             
             # Filter special tokens except EOS
-            for token_id in tokenizer.all_special_ids:
-                if token_id != tokenizer.eos_token_id:
+            for token_id in special_tokens:
+                if token_id != eos_token_id:
                     next_token_logits[:, token_id] = float('-inf')
             
             # Apply repetition penalty
@@ -53,7 +74,7 @@ def test_inference(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
             
             next_token = top_k_indices[0, torch.multinomial(top_k_probs[0], 1)]
             
-            if next_token == tokenizer.eos_token_id:
+            if next_token == eos_token_id:
                 break
                 
             generated_tokens.append(next_token.item())

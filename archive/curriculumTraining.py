@@ -50,7 +50,7 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
     criterion = nn.CrossEntropyLoss(ignore_index=-100, label_smoothing=0.15)
     best_val_loss = float('inf')
     patience_counter = 0
-    scaler = torch.cuda.amp.GradScaler(enabled=True)
+    scaler = torch.amp.GradScaler('cuda', enabled=True)
     
     try:
         for epoch in range(num_epochs):

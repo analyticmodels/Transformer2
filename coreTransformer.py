@@ -146,99 +146,30 @@ class TransformerBlock(nn.Module):
         return x
 
 class SmallTransformer(nn.Module):
-    """A transformer model for language modeling tasks with curriculum learning support.
-    
-    This implementation uses:
-    - Scaled embedding with learned positional encodings
-    - Pre-layer normalization architecture for stability
-    - Progressive layer-wise dropout
-    - Separate input and output projections
-    
-    Args:
-        vocab_size (int): Size of the vocabulary
-        d_model (int): Model dimension/hidden size
-        num_heads (int): Number of attention heads
-        num_layers (int): Number of transformer layers
-        d_ff (int): Feed-forward network hidden dimension
-        max_seq_len (int): Maximum sequence length
-        dropout (float): Dropout probability
-    """
-    def __init__(self, vocab_size, d_model=768, num_heads=12, num_layers=12, 
-                 d_ff=3072, max_seq_len=512, dropout=0.1):
-        super().__init__()
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.max_seq_len = max_seq_len
-        self.num_layers = num_layers
-        
-        # Token and position embeddings with proper scaling
-        self.embedding_scale = math.sqrt(d_model)
-        self.embedding = nn.Embedding(vocab_size, d_model, padding_idx=0)
-        self.pos_embedding = nn.Parameter(torch.zeros(1, max_seq_len, d_model))
-        
-        # Input processing
-        self.layer_norm_embed = nn.LayerNorm(d_model, eps=1e-6)
-        self.dropout = nn.Dropout(dropout)
-        self.input_proj = nn.Linear(d_model, d_model)
-        
-        # Transformer blocks
-        self.transformer_blocks = nn.ModuleList([
-            TransformerBlock(
-                d_model=d_model,
-                num_heads=num_heads,
-                d_ff=d_ff,
-                dropout=dropout,
-                layer_idx=i,
-                num_layers=num_layers
-            ) for i in range(num_layers)
+    def __init__(self, vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_len, dropout):
+        super(SmallTransformer, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        self.positional_encoding = nn.Parameter(torch.zeros(1, max_seq_len, d_model))
+        self.layers = nn.ModuleList([
+            nn.TransformerEncoderLayer(d_model, num_heads, d_ff, dropout)
+            for _ in range(num_layers)
         ])
-        
-        # Output processing
-        self.final_norm = nn.LayerNorm(d_model, eps=1e-6)
-        self.output_proj = nn.Linear(d_model, d_model)
-        self.fc = nn.Linear(d_model, vocab_size)
-        
-        self._init_weights()
-    
-    def _init_weights(self):
-        """Initialize weights with scaled normal distribution."""
-        # Initialize embedding layers
-        nn.init.normal_(self.embedding.weight, mean=0, std=0.02)
-        nn.init.normal_(self.pos_embedding, std=0.02)
-        
-        # Initialize projection layers
-        for module in [self.input_proj, self.output_proj, self.fc]:
-            nn.init.normal_(module.weight, std=0.02 / math.sqrt(2 * self.num_layers))
-            nn.init.zeros_(module.bias)
-    
+        self.dropout = nn.Dropout(dropout)
+        self.output_layer = nn.Linear(d_model, vocab_size)
+
     def forward(self, input_ids, attention_mask=None):
-        """
-        Args:
-            input_ids (torch.Tensor): Input token ids of shape [batch_size, seq_len]
-            attention_mask (torch.Tensor, optional): Attention mask of shape [batch_size, seq_len]
-            
-        Returns:
-            torch.Tensor: Logits of shape [batch_size, seq_len, vocab_size]
-        """
-        B, S = input_ids.shape
-        assert S <= self.max_seq_len, f"Input sequence length {S} exceeds maximum {self.max_seq_len}"
-        
-        # Embeddings with proper scaling
-        x = self.embedding(input_ids) * self.embedding_scale
-        x = x + self.pos_embedding[:, :S, :]
-        x = self.layer_norm_embed(x)
+        # Embed input tokens and add positional encoding
+        x = self.embedding(input_ids) + self.positional_encoding[:, :input_ids.size(1), :]
         x = self.dropout(x)
-        x = self.input_proj(x)
-        
-        # Process attention mask once
+
+        # Transpose attention_mask to match the expected shape [seq_len, batch_size]
         if attention_mask is not None:
-            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-            attention_mask = (1.0 - attention_mask) * torch.finfo(x.dtype).min
-        
-        # Apply transformer blocks
-        for block in self.transformer_blocks:
-            x = block(x, attention_mask)
-        
-        x = self.final_norm(x)
-        x = self.output_proj(x)
-        return self.fc(x)
+            attention_mask = attention_mask.transpose(0, 1)
+
+        # Apply transformer layers
+        for layer in self.layers:
+            x = layer(x, src_key_padding_mask=(attention_mask == 0) if attention_mask is not None else None)
+
+        # Project to vocabulary size
+        logits = self.output_layer(x)  # Shape: [batch_size, seq_len, vocab_size]
+        return logits
