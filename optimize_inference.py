@@ -16,15 +16,17 @@ import numpy as np
 from tqdm import tqdm
 import time
 import json
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from inference import load_model, generate_text
 
 # Optional: only import if available
 try:
     import nltk
+    from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
     nltk.download('punkt', quiet=True)
     HAS_NLTK = True
 except ImportError:
+    print("NLTK not installed. BLEU score calculation will be disabled.")
+    print("If you want to use BLEU scores, install NLTK: pip install nltk")
     HAS_NLTK = False
 
 def log_perplexity(generated_text, model, tokenizer, device):
