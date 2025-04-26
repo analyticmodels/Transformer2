@@ -237,7 +237,7 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
                         'num_heads': getattr(model, 'num_heads', 8),
                         'num_layers': getattr(model, 'num_layers', 6),
                     }
-                }, checkpoint_path)
+                }, checkpoint_path, pickle_protocol=5, _use_new_zipfile_serialization=True)
             else:
                 patience_counter += 1
                 if patience_counter >= patience:
@@ -255,7 +255,7 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
                     'train_losses': train_losses,
                     'val_losses': val_losses,
                     'scaler_state_dict': scaler.state_dict(),
-                }, f'checkpoint_epoch_{epoch+1}.pt')
+                }, f'checkpoint_epoch_{epoch+1}.pt', pickle_protocol=5, _use_new_zipfile_serialization=True)
                 
     except KeyboardInterrupt:
         print("Training interrupted by user. Saving checkpoint...")
@@ -268,7 +268,7 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
             'train_losses': train_losses,
             'val_losses': val_losses,
             'scaler_state_dict': scaler.state_dict(),
-        }, 'interrupted_checkpoint.pt')
+        }, 'interrupted_checkpoint.pt', pickle_protocol=5, _use_new_zipfile_serialization=True)
         
     except Exception as e:
         print(f"Training interrupted by error: {str(e)}")

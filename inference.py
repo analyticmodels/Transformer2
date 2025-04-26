@@ -39,7 +39,7 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
     
     # Load model weights
     try:
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
         model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         print(f"Model loaded successfully from {model_path}")
     except Exception as e:
