@@ -179,9 +179,9 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Prepare tokenizer for transformer model")
-    parser.add_argument('--dataset_type', type=str, default='wikitext',
+    parser.add_argument('--dataset_type', type=str, default='bluesky',
                        help='Dataset to use for tokenizer training (wikitext, imdb)')
-    parser.add_argument('--vocab_size', type=int, default=50000,
+    parser.add_argument('--vocab_size', type=int, default=500000,
                        help='Vocabulary size for the tokenizer')
     
     args = parser.parse_args()
