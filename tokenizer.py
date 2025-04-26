@@ -129,17 +129,45 @@ def create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="wikitext", *
     Returns:
         BaseTokenizerWrapper: A wrapped tokenizer instance.
     """
-    if tokenizer_type == "byte-level-bpe":
-        if os.path.exists("tokenizer/vocab.json"):
-            tokenizer = ByteLevelBPETokenizer.from_file(
-                "tokenizer/vocab.json",
-                "tokenizer/merges.txt"
-            )
-        else:
-            tokenizer = train_byte_level_tokenizer(dataset_type, **kwargs)
-        return ByteLevelBPETokenizerWrapper(tokenizer)
+    # Check if we have pre-trained GPT2 tokenizer files
+    if tokenizer_type == "gpt2":
+        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+        return HuggingFaceTokenizerWrapper(tokenizer)
     
-    elif tokenizer_type == "gpt2":
+    # For byte-level BPE tokenizer
+    elif tokenizer_type == "byte-level-bpe":
+        # Check for existing tokenizer files
+        if os.path.exists("tokenizer/vocab.json") and os.path.exists("tokenizer/merges.txt"):
+            try:
+                # Try to load the existing tokenizer
+                tokenizer = ByteLevelBPETokenizer.from_file(
+                    "tokenizer/vocab.json",
+                    "tokenizer/merges.txt"
+                )
+                print("Using existing tokenizer files.")
+                return ByteLevelBPETokenizerWrapper(tokenizer)
+            except Exception as e:
+                print(f"Error loading existing tokenizer: {e}")
+                print("Will create a new tokenizer.")
+        
+        # If no tokenizer files or loading failed, check for pre-existing training data
+        if os.path.exists("tokenizer/training_data.txt"):
+            print("Using existing training data file for tokenizer training.")
+            # Initialize and train tokenizer
+            tokenizer = ByteLevelBPETokenizer()
+            tokenizer.train(
+                files=["tokenizer/training_data.txt"],
+                vocab_size=kwargs.get('vocab_size', 50000),
+                min_frequency=kwargs.get('min_frequency', 2),
+                special_tokens=["<s>", "</s>", "<pad>", "<unk>"]
+            )
+            tokenizer.save_model("tokenizer")
+            return ByteLevelBPETokenizerWrapper(tokenizer)
+        
+        # If no training data, we'd have to generate it
+        print("No existing tokenizer or training data found.")
+        print("For faster tokenizer initialization, please run 'python tokenizer.py' first.")
+        print("Using GPT2 tokenizer as fallback.")
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         return HuggingFaceTokenizerWrapper(tokenizer)
     
@@ -148,7 +176,31 @@ def create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="wikitext", *
 
 # Only execute this code if the file is run directly (not imported)
 if __name__ == "__main__":
-    tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="wikitext")
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Prepare tokenizer for transformer model")
+    parser.add_argument('--dataset_type', type=str, default='wikitext',
+                       help='Dataset to use for tokenizer training (wikitext, imdb)')
+    parser.add_argument('--vocab_size', type=int, default=50000,
+                       help='Vocabulary size for the tokenizer')
+    
+    args = parser.parse_args()
+    
+    print(f"Preparing tokenizer with {args.dataset_type} dataset...")
+    
+    # Create tokenizer training data if needed
+    if not os.path.exists("tokenizer/training_data.txt"):
+        print("Creating tokenizer training data...")
+        # Load and prepare dataset for tokenizer training
+        train_byte_level_tokenizer(args.dataset_type, vocab_size=args.vocab_size)
+    
+    # Now create the tokenizer
+    tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type=args.dataset_type)
+    
+    # Test the tokenizer
     prompt = "Hello, how are you?"
     encoded = tokenizer.encode(prompt)
-    print(f"Encoded input: {encoded}")
+    print(f"Tokenizer test - Encoded: {encoded}")
+    
+    print("\nTokenizer preparation complete.")
+    print("You can now use inference.py for text generation.")
