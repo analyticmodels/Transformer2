@@ -273,7 +273,10 @@ def main():
     
     print("Parameter grid:")
     for param, values in params_grid.items():
-        print(f"  {param}: {list(values)}")
+        if param != 'max_tokens':
+            print(f"  {param}: {list(values)}")
+        else:
+            print(f"  {param}: {values}")
     
     # Load model and tokenizer
     print(f"Loading model from {args.model_path}...")
@@ -308,14 +311,33 @@ def main():
     
     # Save best parameters to file
     best_params = results[0]['params']
+    
+    # Convert numpy values to Python native types for JSON serialization
+    def convert_to_native_types(obj):
+        if isinstance(obj, dict):
+            return {k: convert_to_native_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_to_native_types(item) for item in obj]
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return convert_to_native_types(obj.tolist())
+        else:
+            return obj
+    
+    # Convert all values to native Python types
+    output_data = convert_to_native_types({
+        'prompt': args.prompt,
+        'best_params': best_params,
+        'metrics': results[0]['metrics'],
+        'generated_text': results[0]['generated_text'],
+        'all_results': results[:10]  # Save top 10 results
+    })
+    
     with open(args.output, 'w') as f:
-        json.dump({
-            'prompt': args.prompt,
-            'best_params': best_params,
-            'metrics': results[0]['metrics'],
-            'generated_text': results[0]['generated_text'],
-            'all_results': results[:10]  # Save top 10 results
-        }, f, indent=2)
+        json.dump(output_data, f, indent=2)
     
     print(f"\nBest parameters saved to {args.output}")
     print(f"Best parameters: temp={best_params['temperature']:.2f}, top_k={best_params['top_k']}, "
