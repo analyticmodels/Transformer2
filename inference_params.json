@@ -1,5 +1,189 @@
 {
   "prompt": "The journey begins with ",
   "best_params": {
-    "temperature": 0.5,
-    "top_k": 
+    "temperature": 1.0,
+    "top_k": 50,
+    "top_p": 0.95,
+    "repetition_penalty": 1.5,
+    "max_tokens": 20
+  },
+  "metrics": {
+    "score": 0.748,
+    "length": 8.0,
+    "diversity": 1.0,
+    "perplexity": 2.103358347042774
+  },
+  "generated_text": " IT with TH\ufffding that with.\ufffd for up now'\ufffd20\ufffdwile!",
+  "all_results": [
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 0.95,
+        "repetition_penalty": 1.5,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.748,
+        "length": 8.0,
+        "diversity": 1.0,
+        "perplexity": 2.103358347042774
+      },
+      "generation_time": 0.024378538131713867,
+      "generated_text": " IT with TH\ufffding that with.\ufffd for up now'\ufffd20\ufffdwile!"
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 10,
+        "top_p": 0.8,
+        "repetition_penalty": 1.5,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.73,
+        "length": 5.0,
+        "diversity": 1.0,
+        "perplexity": 1.9763130024566995
+      },
+      "generation_time": 0.024818897247314453,
+      "generated_text": "\ufffd\noT\ufffd/4 for.w with!G #\ufffd\ufffd#x("
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 10,
+        "top_p": 0.95,
+        "repetition_penalty": 1.0,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.73,
+        "length": 5.0,
+        "diversity": 1.0,
+        "perplexity": 1.7902675816132594
+      },
+      "generation_time": 0.024163246154785156,
+      "generated_text": "\n\ufffd'T\ufffd #T* ! !.\ufffdA  !!\n"
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 0.95,
+        "repetition_penalty": 1.0,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.73,
+        "length": 5.0,
+        "diversity": 1.0,
+        "perplexity": 2.2840037639279656
+      },
+      "generation_time": 0.024400711059570312,
+      "generated_text": " -TwT(! from( NO (ly \ufffdSN!vGI"
+    },
+    {
+      "params": {
+        "temperature": 0.5,
+        "top_k": 10,
+        "top_p": 0.8,
+        "repetition_penalty": 1.0,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.724,
+        "length": 4.0,
+        "diversity": 1.0,
+        "perplexity": 1.8255646058688677
+      },
+      "generation_time": 0.15066862106323242,
+      "generated_text": "/\ufffd!T\ufffd/ with with.T with!\ufffd\ufffdAwwww"
+    },
+    {
+      "params": {
+        "temperature": 0.5,
+        "top_k": 50,
+        "top_p": 0.8,
+        "repetition_penalty": 1.0,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.724,
+        "length": 4.0,
+        "diversity": 1.0,
+        "perplexity": 1.916864073241995
+      },
+      "generation_time": 0.022893905639648438,
+      "generated_text": "\u0435\ufffd! for\ufffd. forG!.G!!!\n!!!!!"
+    },
+    {
+      "params": {
+        "temperature": 0.5,
+        "top_k": 50,
+        "top_p": 0.8,
+        "repetition_penalty": 1.5,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.724,
+        "length": 4.0,
+        "diversity": 1.0,
+        "perplexity": 1.9416241363140303
+      },
+      "generation_time": 0.023468732833862305,
+      "generated_text": "\ufffd\ufffd.\nTw with for!'\ufffd.T/S(\ufffd.vcom"
+    },
+    {
+      "params": {
+        "temperature": 0.5,
+        "top_k": 10,
+        "top_p": 0.8,
+        "repetition_penalty": 1.5,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.718,
+        "length": 3.0,
+        "diversity": 1.0,
+        "perplexity": 1.9785061931519803
+      },
+      "generation_time": 0.024859905242919922,
+      "generated_text": "\ufffdTw with\u30be\ufffd\ufffd\ufffd/A\ufffd\ufffd #...v#"
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 0.8,
+        "repetition_penalty": 1.0,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.718,
+        "length": 3.0,
+        "diversity": 1.0,
+        "perplexity": 2.1913794594592018
+      },
+      "generation_time": 0.02422165870666504,
+      "generated_text": "\ufffd\ufffd.\ufffd\u307c\ufffd@\nwF\nw..com..vwtt/"
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 0.8,
+        "repetition_penalty": 1.5,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.718,
+        "length": 3.0,
+        "diversity": 1.0,
+        "perplexity": 2.7537720865370408
+      },
+      "generation_time": 0.024019956588745117,
+      "generated_text": "BTw7\ufffd206\n h.#2v!\ufffdly wo..\ufffd"
+    }
+  ]
+}
