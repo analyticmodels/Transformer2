@@ -83,19 +83,26 @@ def train_byte_level_tokenizer(dataset_type, vocab_size=50000, min_frequency=2):
     Returns:
         ByteLevelBPETokenizer: The trained tokenizer.
     """
-    # # Load the dataset based on the dataset_type
-    # if dataset_type == "reddit":
-    #     dataset = get_reddit_dataloaders(batch_size=32, max_length=512)
-    # elif dataset_type == "bluesky":
-    #     dataset = get_bluesky_dataloaders(batch_size=32, max_length=512)
-    #     print (f"dataset obj: {dataset}")
+    # Load the dataset based on the dataset_type
+    if dataset_type == "wikitext":
+        dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
+        text_field = "text"
+    elif dataset_type == "imdb":
+        dataset = load_dataset("imdb", split="train")
+        text_field = "text"
+    else:
+        # Use a default dataset if the requested one isn't available
+        print(f"Dataset type {dataset_type} not directly supported. Using wikitext as fallback.")
+        dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
+        text_field = "text"
 
     # Write the dataset text to a temporary file for tokenizer training
     os.makedirs("tokenizer", exist_ok=True)
     training_data_path = "tokenizer/training_data.txt"
     with open(training_data_path, "w", encoding="utf-8") as f:
-        for text in dataset['train']['text']:
-            if text.strip():  # Skip empty lines
+        for item in dataset:
+            text = item[text_field]
+            if text and text.strip():  # Skip empty lines
                 f.write(text + "\n")
 
     # Initialize and train the Byte-Level BPE tokenizer
@@ -139,8 +146,9 @@ def create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="wikitext", *
     else:
         raise ValueError(f"Unknown tokenizer type: {tokenizer_type}")
 
-# Example usage
-tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="bluesky")
-prompt = "Hello, how are you?"
-encoded = tokenizer.encode(prompt)
-print(f"Encoded input: {encoded}")
+# Only execute this code if the file is run directly (not imported)
+if __name__ == "__main__":
+    tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="wikitext")
+    prompt = "Hello, how are you?"
+    encoded = tokenizer.encode(prompt)
+    print(f"Encoded input: {encoded}")
