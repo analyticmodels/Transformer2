@@ -2,86 +2,52 @@
   "prompt": "The future of AI is",
   "best_params": {
     "temperature": 1.0,
-    "top_k": 10,
-    "top_p": 0.95,
-    "repetition_penalty": 1.5,
+    "top_k": 30,
+    "top_p": 0.8,
+    "repetition_penalty": 1.25,
     "max_tokens": 50
   },
   "metrics": {
-    "score": 0.746,
-    "length": 7.666666666666667,
+    "score": 0.7399999999999999,
+    "length": 6.666666666666667,
     "diversity": 1.0,
-    "perplexity": 1.8721068624128445
+    "perplexity": 1.9036330143279454
   },
-  "generated_text": "4\ufffdhT\u30b8\ufffd\ufffd\u063c#com\ufffd\n20\ufffd\ufffd\ufffd\ufffd24\ufffd\ufffd\u305f\ufffd\ufffdB.\ufffd\ufffdw \ufffd\ufffd with\u03bd Day69\ufffd\u0419\u306f",
+  "generated_text": "24\nwT\u307e\ufffd\ufffd\u307d\ufffdw. w\ufffd...co\ufffd\ufffdcom/4 h\ufffd\ufffd#/\ufffd#9\ufffd/\ufffd\n are306\ufffditter- = A at #424207\ufffd",
   "all_results": [
     {
       "params": {
         "temperature": 1.0,
-        "top_k": 10,
-        "top_p": 0.95,
-        "repetition_penalty": 1.5,
-        "max_tokens": 50
-      },
-      "metrics": {
-        "score": 0.746,
-        "length": 7.666666666666667,
-        "diversity": 1.0,
-        "perplexity": 1.8721068624128445
-      },
-      "generation_time": 0.06124409039815267,
-      "generated_text": "4\ufffdhT\u30b8\ufffd\ufffd\u063c#com\ufffd\n20\ufffd\ufffd\ufffd\ufffd24\ufffd\ufffd\u305f\ufffd\ufffdB.\ufffd\ufffdw \ufffd\ufffd with\u03bd Day69\ufffd\u0419\u306f"
-    },
-    {
-      "params": {
-        "temperature": 1.0,
-        "top_k": 10,
-        "top_p": 0.95,
+        "top_k": 30,
+        "top_p": 0.8,
         "repetition_penalty": 1.25,
         "max_tokens": 50
       },
       "metrics": {
-        "score": 0.73,
-        "length": 5.0,
+        "score": 0.7399999999999999,
+        "length": 6.666666666666667,
         "diversity": 1.0,
-        "perplexity": 1.9444245819196055
+        "perplexity": 1.9036330143279454
       },
-      "generation_time": 0.0595559279123942,
-      "generated_text": " from\ufffd with\ufffd\u3078\ufffd\ufffd\u0435\ufffd\ufffd\ufffdA\ufffd\u3040\ufffd\ufffdBcom\u3059\ufffdT\ufffd#\u3050\u305d\ufffd\ufffd(\ufffd\ufffd\ufffd20\ufffd\ufffd times for today\u307a\u3050\ufffd\ufffd"
+      "generation_time": 0.06068277359008789,
+      "generated_text": "24\nwT\u307e\ufffd\ufffd\u307d\ufffdw. w\ufffd...co\ufffd\ufffdcom/4 h\ufffd\ufffd#/\ufffd#9\ufffd/\ufffd\n are306\ufffditter- = A at #424207\ufffd"
     },
     {
       "params": {
         "temperature": 1.0,
-        "top_k": 30,
+        "top_k": 50,
         "top_p": 0.875,
         "repetition_penalty": 1.25,
         "max_tokens": 50
       },
       "metrics": {
-        "score": 0.73,
-        "length": 5.0,
+        "score": 0.7360000000000001,
+        "length": 6.0,
         "diversity": 1.0,
-        "perplexity": 1.8830457792657211
+        "perplexity": 1.9729799702841346
       },
-      "generation_time": 0.05992277463277181,
-      "generated_text": "\ufffd\no24\ufffd\ufffd/\ufffd\ufffdn\n#\ufffd\u303cw[6\u30b9\ufffd\ufffd/ \ufffd\ufffd\ufffd\ufffd\ufffd+G1.. w was\u063a8com2477\ufffd24"
-    },
-    {
-      "params": {
-        "temperature": 1.0,
-        "top_k": 50,
-        "top_p": 0.8,
-        "repetition_penalty": 1.25,
-        "max_tokens": 50
-      },
-      "metrics": {
-        "score": 0.73,
-        "length": 5.0,
-        "diversity": 1.0,
-        "perplexity": 2.1009627745618773
-      },
-      "generation_time": 0.06068229675292969,
-      "generated_text": "24Tw\ufffd\ufffd\ufffd#\u307b \ufffd\ufffd  I I\u3051\ufffd[  A\ufffd\u0438\ufffd\ufffdb\ufffd/4(y20\ufffd\ufffd\u8919\ufffd28The\ufffd\ufffd1591\ufffd\ufffd\ufffdth"
+      "generation_time": 0.06298430760701497,
+      "generated_text": "\ufffd\ufffdw6\ufffd\ufffd into7\u63bc\ufffd20\ufffd\ufffd\u06382020B\ufffd\ufffd/sh15\ufffd\ufffd\ufffd\u043024\ufffd\ufffd12/Th\ufffd Friday%#[1......\ufffd"
     },
     {
       "params": {
@@ -92,13 +58,30 @@
         "max_tokens": 50
       },
       "metrics": {
+        "score": 0.7319999999999999,
+        "length": 5.333333333333333,
+        "diversity": 1.0,
+        "perplexity": 2.2748685809239184
+      },
+      "generation_time": 0.06296221415201823,
+      "generated_text": "24\ufffd with7T!C\ufffd4.\n3v\ufffd \ufffd (w\ufffd\ufffdBcom2\ufffd20\ufffdsh!241468\ufffd\ufffd9e for..36#\u06051144nethtMFG90"
+    },
+    {
+      "params": {
+        "temperature": 0.5,
+        "top_k": 10,
+        "top_p": 0.95,
+        "repetition_penalty": 1.5,
+        "max_tokens": 50
+      },
+      "metrics": {
         "score": 0.73,
         "length": 5.0,
         "diversity": 1.0,
-        "perplexity": 2.3338033942706677
+        "perplexity": 1.938310023196484
       },
-      "generation_time": 0.06139874458312988,
-      "generated_text": " from\ufffdtt\ufffdcom\ufffd7T\ufffd\ufffd\u03d0\u30b8\ufffd since\ufffdvbe+\nwS210\u3040\ufffd\ufffdDwco\ufffd\ufffd\ufffdM8\ufffdplay..\ufffd\ufffdnW#ht116A12"
+      "generation_time": 0.06159543991088867,
+      "generated_text": "\ufffd\ufffdw\ufffd\n../T- wB.com24\u903c# for7\ufffd\ufffd24\ufffd65\ufffd8\ufffd2\u717cQ\ufffd124h\ufffd times1691C29htb\ufffd"
     },
     {
       "params": {
@@ -109,34 +92,51 @@
         "max_tokens": 50
       },
       "metrics": {
-        "score": 0.7280000000000001,
-        "length": 4.666666666666667,
+        "score": 0.73,
+        "length": 5.0,
         "diversity": 1.0,
-        "perplexity": 1.9501506592377105
+        "perplexity": 2.0324321768159526
       },
-      "generation_time": 0.060318311055501304,
-      "generated_text": ":\ufffdwT\u30bc\ufffdS\u5e3d\ufffd20\ufffd24\u303cA#247w@G \u3059\u3066\ufffd\u0644\ufffd#9)\ufffdw5 - for~(\ufffd86..com"
+      "generation_time": 0.06072354316711426,
+      "generated_text": "\ufffd\nw\ufffd\r\ufffd3T&\ufffd\ufffd#\u307c\ufffd\u3051\ufffd20-\u3024\ncom4co\ufffd24@\ufffdBw/\nh67\ufffdER\ufffd\ufffd89b\ufffdPS:"
     },
     {
       "params": {
-        "temperature": 0.75,
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 0.8,
+        "repetition_penalty": 1.25,
+        "max_tokens": 50
+      },
+      "metrics": {
+        "score": 0.73,
+        "length": 5.0,
+        "diversity": 1.0,
+        "perplexity": 1.834784543211791
+      },
+      "generation_time": 0.0626060962677002,
+      "generated_text": "24\ufffdwb\ufffd\u0600(\ufffd\ufffd#(24\ufffd\ufffdcom\ufffdcoF\u30998TT\ufffd\ufffdB2024\ufffd\ufffdJwT79 was 1 - for today1)6com \u03c4.."
+    },
+    {
+      "params": {
+        "temperature": 1.0,
         "top_k": 50,
         "top_p": 0.875,
         "repetition_penalty": 1.5,
         "max_tokens": 50
       },
       "metrics": {
-        "score": 0.7280000000000001,
-        "length": 4.666666666666667,
+        "score": 0.73,
+        "length": 5.0,
         "diversity": 1.0,
-        "perplexity": 1.8330249056060273
+        "perplexity": 2.0971082111040906
       },
-      "generation_time": 0.06087001164754232,
-      "generated_text": "\ufffd\ufffdw#T\ufffdB20\ufffd\u0600\ufffd\ufffd\u30bc\ufffd\ufffd24\n\ufffd\ufffdTw\ufffd6\ufffd..com/6-\ufffd\ufffdC84 was\u30c572[389com11:"
+      "generation_time": 0.06419936815897624,
+      "generated_text": " at\ufffdw\ufffd\ufffd\u0430: \u03b845\u6e7b\ufffd\ufffd/ w6\u3f2fp7A..\nAg\ufffd\uff7a-#T\ufffd\u3059\ufffd 2000\u8910\u061b\ufffd\u30fc"
     },
     {
       "params": {
-        "temperature": 1.0,
+        "temperature": 0.5,
         "top_k": 30,
         "top_p": 0.8,
         "repetition_penalty": 1.5,
@@ -146,14 +146,14 @@
         "score": 0.7280000000000001,
         "length": 4.666666666666667,
         "diversity": 1.0,
-        "perplexity": 2.0174150765469197
+        "perplexity": 1.7580256034127306
       },
-      "generation_time": 0.06112353006998698,
-      "generated_text": "\ufffd\ufffdw2\u30fc\ufffd\ufffd\ufffd24\n( w\ufffd4\ufffd\ufffd..com/87..\ufffd9.6\ufffd14T with\ufffdg11\ufffdb..5e\ufffd32 to)Mpen?[B"
+      "generation_time": 0.060676256815592446,
+      "generated_text": "\ufffd\ufffdwT\u30bc\ufffd/-\ufffd\ufffd\n#24\ufffd\ufffd\u0639\ufffd\u3059\u3040\ufffd\ufffd\u543a\u305f\u3059\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd \u0634\u673c\ufffd\ufffd\ufffd\ufffd\u0435"
     },
     {
       "params": {
-        "temperature": 1.0,
+        "temperature": 0.5,
         "top_k": 30,
         "top_p": 0.875,
         "repetition_penalty": 1.5,
@@ -163,16 +163,16 @@
         "score": 0.7280000000000001,
         "length": 4.666666666666667,
         "diversity": 1.0,
-        "perplexity": 2.029398039919324
+        "perplexity": 1.7979357732105534
       },
-      "generation_time": 0.0614777406056722,
-      "generated_text": "21\ufffdw\n\ufffd\ufffd\ufffd.\ufffd\ufffd:\n\ufffd4\ufffd\u063a\ufffd([24T\ufffd6 #\ufffd\ufffdAp\ufffd\ufffd#\ufffd20\ufffdP\ufffd -7BW\ufffd\ufffdsp\ufffd\ufffd"
+      "generation_time": 0.06101544698079427,
+      "generated_text": "\ufffd\ufffdw\ufffd\n#24\ufffd\u063c\ufffdTG4T/\ufffd201\ufffd\ufffd.9M(com7\ufffd@82\n5Bh..626w\ufffdPco11 for!\ufffd\ufffdY17"
     },
     {
       "params": {
         "temperature": 1.0,
-        "top_k": 50,
-        "top_p": 0.875,
+        "top_k": 10,
+        "top_p": 0.8,
         "repetition_penalty": 1.5,
         "max_tokens": 50
       },
@@ -180,10 +180,10 @@
         "score": 0.7280000000000001,
         "length": 4.666666666666667,
         "diversity": 1.0,
-        "perplexity": 1.990432191595348
+        "perplexity": 1.9176633483926342
       },
-      "generation_time": 0.06059145927429199,
-      "generated_text": "\ufffd\ufffdw#I\ufffd\ufffd126\ufffd24j\u307c\ufffd\ufffdJeT8T\ufffd#MAwPDyFG#24BhQcom2020\ufffd\ufffdblH@2bW[\ufffd"
+      "generation_time": 0.06069080034891764,
+      "generated_text": " at\ufffdw\ufffdT# from\u5f192420A\ufffd\u9025\ufffd..9(\ufffd\ufffd\ufffdB\ufffd\ufffdP\ufffd\ufffdSly \ufffd72com611816\ufffd times)\nW for30 withO15"
     }
   ]
 }
