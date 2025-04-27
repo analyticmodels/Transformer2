@@ -1,138 +1,36 @@
 {
-  "prompt": "The future of AI is ",
+  "prompt": "The future of AI is",
   "best_params": {
-    "temperature": 0.5,
+    "temperature": 1.0,
     "top_k": 50,
     "top_p": 0.8,
     "repetition_penalty": 1.5,
-    "max_tokens": 20
+    "max_tokens": 50
   },
   "metrics": {
-    "score": 0.746,
-    "length": 11.0,
-    "diversity": 0.9333333333333333,
-    "perplexity": 1.4063821058580122
+    "score": 0.806105035267826,
+    "length": 33.666666666666664,
+    "diversity": 0.6803501175594199,
+    "perplexity": 1.458810020255128
   },
-  "generated_text": ".. way the and..'m! # of\u3092 time in is1el can. that",
+  "generated_text": " him him die be way in of all my! can't. It time time where and? him more to in ines- on in & p that in the more.,,'t\u306bz in of of4 this my on, A in",
   "all_results": [
     {
       "params": {
-        "temperature": 0.5,
-        "top_k": 50,
-        "top_p": 0.8,
-        "repetition_penalty": 1.5,
-        "max_tokens": 20
-      },
-      "metrics": {
-        "score": 0.746,
-        "length": 11.0,
-        "diversity": 0.9333333333333333,
-        "perplexity": 1.4063821058580122
-      },
-      "generation_time": 0.02413463592529297,
-      "generated_text": ".. way the and..'m! # of\u3092 time in is1el can. that"
-    },
-    {
-      "params": {
-        "temperature": 1.0,
-        "top_k": 50,
-        "top_p": 0.95,
-        "repetition_penalty": 1.0,
-        "max_tokens": 20
-      },
-      "metrics": {
-        "score": 0.7190588235294118,
-        "length": 12.0,
-        "diversity": 0.8235294117647058,
-        "perplexity": 1.6186394000806918
-      },
-      "generation_time": 0.02409982681274414,
-      "generated_text": "id court findY! and to elU!ks. 10 and\" tu of on of"
-    },
-    {
-      "params": {
-        "temperature": 1.0,
-        "top_k": 50,
-        "top_p": 0.8,
-        "repetition_penalty": 1.0,
-        "max_tokens": 20
-      },
-      "metrics": {
-        "score": 0.718,
-        "length": 13.0,
-        "diversity": 0.8,
-        "perplexity": 1.4125649399060616
-      },
-      "generation_time": 0.024317502975463867,
-      "generated_text": " find \" of\n where. A Itz A is to\n of. on way A.z"
-    },
-    {
-      "params": {
         "temperature": 1.0,
         "top_k": 50,
         "top_p": 0.8,
         "repetition_penalty": 1.5,
-        "max_tokens": 20
+        "max_tokens": 50
       },
       "metrics": {
-        "score": 0.7130588235294117,
-        "length": 11.0,
-        "diversity": 0.8235294117647058,
-        "perplexity": 1.3801292741571198
+        "score": 0.806105035267826,
+        "length": 33.666666666666664,
+        "diversity": 0.6803501175594199,
+        "perplexity": 1.458810020255128
       },
-      "generation_time": 0.024166584014892578,
-      "generated_text": ". findid find\nc #I that no. A #,.... but where.!"
-    },
-    {
-      "params": {
-        "temperature": 0.5,
-        "top_k": 50,
-        "top_p": 0.95,
-        "repetition_penalty": 1.0,
-        "max_tokens": 20
-      },
-      "metrics": {
-        "score": 0.698,
-        "length": 8.0,
-        "diversity": 0.8333333333333334,
-        "perplexity": 1.4173613430616956
-      },
-      "generation_time": 0.023502111434936523,
-      "generated_text": ". from toY\n.ig is\n. my..,. #.id.0"
-    },
-    {
-      "params": {
-        "temperature": 0.5,
-        "top_k": 10,
-        "top_p": 0.95,
-        "repetition_penalty": 1.5,
-        "max_tokens": 20
-      },
-      "metrics": {
-        "score": 0.694,
-        "length": 9.0,
-        "diversity": 0.8,
-        "perplexity": 1.4779745369143846
-      },
-      "generation_time": 0.023909807205200195,
-      "generated_text": ". him way of and.!. and, in..\n is. and..."
-    },
-    {
-      "params": {
-        "temperature": 1.0,
-        "top_k": 10,
-        "top_p": 0.8,
-        "repetition_penalty": 1.5,
-        "max_tokens": 20
-      },
-      "metrics": {
-        "score": 0.69025,
-        "length": 14.0,
-        "diversity": 0.6875,
-        "perplexity": 1.3779060410817183
-      },
-      "generation_time": 0.023834228515625,
-      "generated_text": ". It\n and to\n. in of and on.! A can and on. and "
+      "generation_time": 0.058140198389689125,
+      "generated_text": " him him die be way in of all my! can't. It time time where and? him more to in ines- on in & p that in the more.,,'t\u306bz in of of4 this my on, A in"
     },
     {
       "params": {
@@ -140,50 +38,152 @@
         "top_k": 50,
         "top_p": 0.95,
         "repetition_penalty": 1.5,
-        "max_tokens": 20
+        "max_tokens": 50
       },
       "metrics": {
-        "score": 0.685,
-        "length": 10.0,
-        "diversity": 0.75,
-        "perplexity": 1.5166750117599583
+        "score": 0.7937789661319073,
+        "length": 23.333333333333332,
+        "diversity": 0.8459298871063577,
+        "perplexity": 1.4959547751352724
       },
-      "generation_time": 0.02399277687072754,
-      "generated_text": "idelY of.ersers and A)) in  have on and aS\n in"
+      "generation_time": 0.059312661488850914,
+      "generated_text": ". think to\nishus.gyz...\nz of! have4c...29S time?/ can \u2026 I.-! on....4 way to can from y in andY.Y! this in him.,"
     },
     {
       "params": {
-        "temperature": 0.5,
-        "top_k": 10,
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 0.875,
+        "repetition_penalty": 1.5,
+        "max_tokens": 50
+      },
+      "metrics": {
+        "score": 0.7876149546130572,
+        "length": 24.333333333333332,
+        "diversity": 0.8053831820435237,
+        "perplexity": 1.54794545242978
+      },
+      "generation_time": 0.05888199806213379,
+      "generated_text": ".af0 of o o't he of \", in is\n onS himid4ll of toz on \n/\u2026 a't. to. that\n  Aes?! a4. from can, and a't "
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 30,
         "top_p": 0.95,
-        "repetition_penalty": 1.0,
-        "max_tokens": 20
+        "repetition_penalty": 1.5,
+        "max_tokens": 50
       },
       "metrics": {
-        "score": 0.667,
-        "length": 7.0,
-        "diversity": 0.75,
-        "perplexity": 1.3820729735052686
+        "score": 0.7671410256410257,
+        "length": 29.0,
+        "diversity": 0.6438034188034188,
+        "perplexity": 1.4818800696863965
       },
-      "generation_time": 0.023468017578125,
-      "generated_text": " of and in. It. in...\n....! in..\n"
+      "generation_time": 0.05842900276184082,
+      "generated_text": " where & of of that of andY of as... on in but! on and of for.\n as. on-. the of A can, in....\n.  in to of of?zes./ can on"
     },
     {
       "params": {
-        "temperature": 0.5,
-        "top_k": 10,
+        "temperature": 0.75,
+        "top_k": 50,
         "top_p": 0.8,
         "repetition_penalty": 1.5,
-        "max_tokens": 20
+        "max_tokens": 50
       },
       "metrics": {
-        "score": 0.6576842105263159,
-        "length": 14.0,
-        "diversity": 0.5789473684210527,
-        "perplexity": 1.3109714585660264
+        "score": 0.764454748362013,
+        "length": 26.333333333333332,
+        "diversity": 0.6881824945400435,
+        "perplexity": 1.528226117724012
       },
-      "generation_time": 0.025207996368408203,
-      "generated_text": "! him in in in. in of and on..! that. and can. in from"
+      "generation_time": 0.05903816223144531,
+      "generated_text": "us where to all really... http http\n http A.z can  and.4 of is my. in #. where where?!. of. noz., can/. to.\u2026. in. that and't to."
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 0.8,
+        "repetition_penalty": 1.25,
+        "max_tokens": 50
+      },
+      "metrics": {
+        "score": 0.7600291720291721,
+        "length": 23.0,
+        "diversity": 0.74009724009724,
+        "perplexity": 1.5890270675315754
+      },
+      "generation_time": 0.05947422981262207,
+      "generated_text": " tuz shot\ud83d\udd25 en...angy find the!an way eu is o of4 he of y. justbsky can whereingbsky\u2019 all of. no that.id\n.  in my -4 in in to. find. all"
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 30,
+        "top_p": 0.8,
+        "repetition_penalty": 1.25,
+        "max_tokens": 50
+      },
+      "metrics": {
+        "score": 0.7599999999999999,
+        "length": 30.0,
+        "diversity": 0.6000000000000001,
+        "perplexity": 1.4570030504814466
+      },
+      "generation_time": 0.058826843897501625,
+      "generated_text": " is him, &,4 but is on of A as a. of the? but of of and.. to.z in. that can the of\u306b in./ to of of of the of the. have can. #. in"
+    },
+    {
+      "params": {
+        "temperature": 0.75,
+        "top_k": 50,
+        "top_p": 0.875,
+        "repetition_penalty": 1.5,
+        "max_tokens": 50
+      },
+      "metrics": {
+        "score": 0.7492941176470588,
+        "length": 22.333333333333332,
+        "diversity": 0.7176470588235295,
+        "perplexity": 1.467208923398144
+      },
+      "generation_time": 0.05919917424519857,
+      "generated_text": " my. way to the in of It and on and.\n can/ and. way\u306b.z't. himeses mees..  and.ers! no on\u2026 of? all.. from. way onS from."
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 30,
+        "top_p": 0.875,
+        "repetition_penalty": 1.5,
+        "max_tokens": 50
+      },
+      "metrics": {
+        "score": 0.7485078173858662,
+        "length": 26.0,
+        "diversity": 0.641692724619554,
+        "perplexity": 1.454103863829203
+      },
+      "generation_time": 0.057716925938924156,
+      "generated_text": ", of from! & of onY to & and. time,? time of in of of4. to\n/ of and-:? can-  #..! and a alles have of!? in.?: and"
+    },
+    {
+      "params": {
+        "temperature": 0.75,
+        "top_k": 30,
+        "top_p": 0.875,
+        "repetition_penalty": 1.5,
+        "max_tokens": 50
+      },
+      "metrics": {
+        "score": 0.743296529416907,
+        "length": 24.333333333333332,
+        "diversity": 0.6576550980563569,
+        "perplexity": 1.4562012645431421
+      },
+      "generation_time": 0.058902581532796226,
+      "generated_text": ".!Y and him time.gyid of of to all # of I of\n in in of can of... # it of. where? on.. is..es. in more. and. #. #."
     }
   ]
 }
