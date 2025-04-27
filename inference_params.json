@@ -2,86 +2,69 @@
   "prompt": "The future of AI is ",
   "best_params": {
     "temperature": 0.5,
-    "top_k": 10,
-    "top_p": 0.95,
+    "top_k": 50,
+    "top_p": 0.8,
     "repetition_penalty": 1.5,
-    "max_tokens": 30
+    "max_tokens": 20
   },
   "metrics": {
-    "score": 0.73,
-    "length": 5.0,
-    "diversity": 1.0,
-    "perplexity": 20.90572092612386
+    "score": 0.746,
+    "length": 11.0,
+    "diversity": 0.9333333333333333,
+    "perplexity": 1.4063821058580122
   },
-  "generated_text": " oppP emp#atively\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069! \n\ufffdTn\ufffd  \n(AMNA oppS\ufffdazzRIW",
+  "generated_text": ".. way the and..'m! # of\u3092 time in is1el can. that",
   "all_results": [
     {
       "params": {
         "temperature": 0.5,
-        "top_k": 10,
-        "top_p": 0.95,
-        "repetition_penalty": 1.5,
-        "max_tokens": 30
-      },
-      "metrics": {
-        "score": 0.73,
-        "length": 5.0,
-        "diversity": 1.0,
-        "perplexity": 20.90572092612386
-      },
-      "generation_time": 0.036284685134887695,
-      "generated_text": " oppP emp#atively\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069! \n\ufffdTn\ufffd  \n(AMNA oppS\ufffdazzRIW"
-    },
-    {
-      "params": {
-        "temperature": 1.0,
-        "top_k": 10,
+        "top_k": 50,
         "top_p": 0.8,
         "repetition_penalty": 1.5,
-        "max_tokens": 30
+        "max_tokens": 20
       },
       "metrics": {
-        "score": 0.724,
-        "length": 4.0,
-        "diversity": 1.0,
-        "perplexity": 39.56070858122475
+        "score": 0.746,
+        "length": 11.0,
+        "diversity": 0.9333333333333333,
+        "perplexity": 1.4063821058580122
       },
-      "generation_time": 0.03704357147216797,
-      "generated_text": "\n\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069\ufffd#\ufffd2Aatively \ufffd\ufffd\ufffd\ufffdK!.j\n emp\ufffdTOv/\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069.\nI3"
+      "generation_time": 0.02413463592529297,
+      "generated_text": ".. way the and..'m! # of\u3092 time in is1el can. that"
     },
     {
       "params": {
         "temperature": 1.0,
-        "top_k": 10,
+        "top_k": 50,
         "top_p": 0.95,
-        "repetition_penalty": 1.5,
-        "max_tokens": 30
+        "repetition_penalty": 1.0,
+        "max_tokens": 20
       },
       "metrics": {
-        "score": 0.724,
-        "length": 4.0,
-        "diversity": 1.0,
-        "perplexity": 34.32144633156012
+        "score": 0.7190588235294118,
+        "length": 12.0,
+        "diversity": 0.8235294117647058,
+        "perplexity": 1.6186394000806918
       },
-      "generation_time": 0.03695178031921387,
-      "generated_text": "),\ufffd \ufffd\u304b.#\ufffd/ We\ufffdw(dTP6\ufffd\ufffdAazz\nu?v\ufffd2\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069O"
+      "generation_time": 0.02409982681274414,
+      "generated_text": "id court findY! and to elU!ks. 10 and\" tu of on of"
     },
     {
       "params": {
-        "temperature": 0.5,
-        "top_k": 10,
+        "temperature": 1.0,
+        "top_k": 50,
         "top_p": 0.8,
         "repetition_penalty": 1.0,
-        "max_tokens": 30
+        "max_tokens": 20
       },
       "metrics": {
-        "score": 0.712,
-        "length": 2.0,
-        "diversity": 1.0,
-        "perplexity": 98.31880894368715
+        "score": 0.718,
+        "length": 13.0,
+        "diversity": 0.8,
+        "perplexity": 1.4125649399060616
       },
-      "generation_time": 0.16753268241882324,
-      "generated_text": "\ufffdazz\ufffdatively\ufffd\ufffd\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069\ufffd\uc659\ufffdazz\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069\ufffdA atively\ufffdatively\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069\ufffd"
+      "generation_time": 0.024317502975463867,
+      "generated_text": " find \" of\n where. A Itz A is to\n of. on way A.z"
     },
     {
       "params": {
@@ -89,33 +72,67 @@
         "top_k": 50,
         "top_p": 0.8,
         "repetition_penalty": 1.5,
-        "max_tokens": 30
+        "max_tokens": 20
       },
       "metrics": {
-        "score": 0.711,
-        "length": 6.0,
-        "diversity": 0.9166666666666666,
-        "perplexity": 8.492259906892382
+        "score": 0.7130588235294117,
+        "length": 11.0,
+        "diversity": 0.8235294117647058,
+        "perplexity": 1.3801292741571198
       },
-      "generation_time": 0.03661155700683594,
-      "generated_text": " opp! emp engagementheyCEMvHw\u0628g( K#j\uc744 We9ol!uR devDj"
+      "generation_time": 0.024166584014892578,
+      "generated_text": ". findid find\nc #I that no. A #,.... but where.!"
+    },
+    {
+      "params": {
+        "temperature": 0.5,
+        "top_k": 50,
+        "top_p": 0.95,
+        "repetition_penalty": 1.0,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.698,
+        "length": 8.0,
+        "diversity": 0.8333333333333334,
+        "perplexity": 1.4173613430616956
+      },
+      "generation_time": 0.023502111434936523,
+      "generated_text": ". from toY\n.ig is\n. my..,. #.id.0"
     },
     {
       "params": {
         "temperature": 0.5,
         "top_k": 10,
-        "top_p": 0.8,
+        "top_p": 0.95,
         "repetition_penalty": 1.5,
-        "max_tokens": 30
+        "max_tokens": 20
       },
       "metrics": {
-        "score": 0.705,
-        "length": 5.0,
-        "diversity": 0.9166666666666666,
-        "perplexity": 15.341725553130606
+        "score": 0.694,
+        "length": 9.0,
+        "diversity": 0.8,
+        "perplexity": 1.4779745369143846
       },
-      "generation_time": 0.037360429763793945,
-      "generated_text": "\ufffd  oppT\n#A\ufffd\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069Jatively\ufffd(! empPj@\ufffdS\u0628!\ufffdF.azz SenT"
+      "generation_time": 0.023909807205200195,
+      "generated_text": ". him way of and.!. and, in..\n is. and..."
+    },
+    {
+      "params": {
+        "temperature": 1.0,
+        "top_k": 10,
+        "top_p": 0.8,
+        "repetition_penalty": 1.5,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.69025,
+        "length": 14.0,
+        "diversity": 0.6875,
+        "perplexity": 1.3779060410817183
+      },
+      "generation_time": 0.023834228515625,
+      "generated_text": ". It\n and to\n. in of and on.! A can and on. and "
     },
     {
       "params": {
@@ -123,67 +140,50 @@
         "top_k": 50,
         "top_p": 0.95,
         "repetition_penalty": 1.5,
-        "max_tokens": 30
+        "max_tokens": 20
       },
       "metrics": {
-        "score": 0.694923076923077,
-        "length": 3.0,
-        "diversity": 0.9230769230769231,
-        "perplexity": 21.27135061840951
+        "score": 0.685,
+        "length": 10.0,
+        "diversity": 0.75,
+        "perplexity": 1.5166750117599583
       },
-      "generation_time": 0.03686118125915527,
-      "generated_text": "\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069K\ufffd@\ufffd\uf61c\n#\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069\ufffd\ufffd\n#A!9\ufffd\u05cfG(P*T"
+      "generation_time": 0.02399277687072754,
+      "generated_text": "idelY of.ersers and A)) in  have on and aS\n in"
     },
     {
       "params": {
         "temperature": 0.5,
-        "top_k": 50,
-        "top_p": 0.95,
-        "repetition_penalty": 1.5,
-        "max_tokens": 30
-      },
-      "metrics": {
-        "score": 0.6898461538461538,
-        "length": 6.0,
-        "diversity": 0.8461538461538461,
-        "perplexity": 23.4197115801301
-      },
-      "generation_time": 0.037833452224731445,
-      "generated_text": "\ufffdw  opp\n#TA\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069\ufffdatively\ufffd*(\ufffd#Jv! opp h\ufffdK \u0628j"
-    },
-    {
-      "params": {
-        "temperature": 0.5,
-        "top_k": 50,
-        "top_p": 0.8,
-        "repetition_penalty": 1.5,
-        "max_tokens": 30
-      },
-      "metrics": {
-        "score": 0.6805000000000001,
-        "length": 3.0,
-        "diversity": 0.875,
-        "perplexity": 30.751722140030235
-      },
-      "generation_time": 0.03609967231750488,
-      "generated_text": "\nASPT empB(\ufffd\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069NnativelyE  opp\ufffd\ufffdF3!!IolGDvY"
-    },
-    {
-      "params": {
-        "temperature": 1.0,
         "top_k": 10,
         "top_p": 0.95,
         "repetition_penalty": 1.0,
-        "max_tokens": 30
+        "max_tokens": 20
       },
       "metrics": {
-        "score": 0.6719129036245117,
-        "length": 3.0,
-        "diversity": 1.0,
-        "perplexity": 113.02215768441857
+        "score": 0.667,
+        "length": 7.0,
+        "diversity": 0.75,
+        "perplexity": 1.3820729735052686
       },
-      "generation_time": 0.036141157150268555,
-      "generated_text": "\nAA\n\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069CsI(\n#MAn\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u304b\u3082\u3057\u308c\u306a\u3044\u3051\u3069AA\ufffd\ufffd\ufffd\ufffd"
+      "generation_time": 0.023468017578125,
+      "generated_text": " of and in. It. in...\n....! in..\n"
+    },
+    {
+      "params": {
+        "temperature": 0.5,
+        "top_k": 10,
+        "top_p": 0.8,
+        "repetition_penalty": 1.5,
+        "max_tokens": 20
+      },
+      "metrics": {
+        "score": 0.6576842105263159,
+        "length": 14.0,
+        "diversity": 0.5789473684210527,
+        "perplexity": 1.3109714585660264
+      },
+      "generation_time": 0.025207996368408203,
+      "generated_text": "! him in in in. in of and on..! that. and can. in from"
     }
   ]
 }
