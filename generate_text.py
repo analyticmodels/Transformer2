@@ -71,7 +71,8 @@ def main():
         dropout=0.1
     )
     
-    # Load checkpoint
+    # Load checkpoint - explicitly use weights_only=False to avoid warnings
+    # and compatibility issues with pickle protocol 5
     checkpoint = torch.load(args.model_path, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     print("Model loaded successfully.")
