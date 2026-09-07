@@ -254,6 +254,9 @@ def main():
     parser.add_argument('--rep_penalty_max', type=float, default=1.5, help='Maximum repetition penalty')
     parser.add_argument('--rep_penalty_steps', type=int, default=3, help='Number of repetition penalty steps')
     parser.add_argument('--max_tokens', type=int, default=50, help='Maximum tokens to generate')
+    parser.add_argument('--num_heads', type=int, default=None,
+                        help='Attention head count the model was trained with '
+                             '(required for checkpoints that record no config)')
     
     args = parser.parse_args()
     
@@ -281,30 +284,13 @@ def main():
     # Load model and tokenizer
     print(f"Loading model from {args.model_path}...")
     
-    # Direct loading approach
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # Create tokenizer
-    from tokenizer import create_tokenizer
-    tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type=args.dataset_type)
-    
-    # Create model and load weights directly
-    from coreTransformer import SmallTransformer
-    model = SmallTransformer(
-        vocab_size=tokenizer.get_vocab_size(),
-        d_model=256,
-        num_heads=8,
-        num_layers=6,
-        d_ff=1024,
-        max_seq_len=512,
-        dropout=0.1
+    # Use the improved load_model function from inference.py
+    # This automatically detects model dimensions from the checkpoint
+    model, tokenizer = load_model(
+        model_path=args.model_path,
+        dataset_type=args.dataset_type,
+        num_heads=args.num_heads
     )
-    
-    # Load checkpoint - explicitly use weights_only=False to avoid warnings
-    # and compatibility issues with pickle protocol 5
-    checkpoint = torch.load(args.model_path, map_location=device, weights_only=False)
-    model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-    print("Model loaded successfully.")
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)

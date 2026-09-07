@@ -78,6 +78,7 @@ def train_model(args):
     print("\n" + "="*80)
     print(f"STEP 2: Training Transformer Model on {args.dataset.capitalize()} Data")
     print("="*80)
+    print(f"Optimizer: {args.optimizer.upper()}")
     
     # Import the training function
     from training import train_model, main as training_main
@@ -95,7 +96,8 @@ def train_model(args):
         f'--num_heads={args.num_heads}',
         f'--num_layers={args.num_layers}',
         f'--d_ff={args.d_ff}',
-        f'--dropout={args.dropout}'
+        f'--dropout={args.dropout}',
+        f'--optimizer={args.optimizer}'
     ]
     
     if args.use_curriculum:
@@ -139,7 +141,7 @@ def main():
     parser.add_argument('--max_samples', type=int, default=10000, 
                         help='Maximum number of posts to fetch from Bluesky dataset')
     
-    # Model training parameters
+    # Model training parameters -
     parser.add_argument('--batch_size', type=int, default=8,
                         help='Batch size for training')
     parser.add_argument('--epochs', type=int, default=30,
@@ -160,6 +162,8 @@ def main():
                         help='Feed-forward dimension')
     parser.add_argument('--dropout', type=float, default=0.1,
                         help='Dropout rate')
+    parser.add_argument('--optimizer', type=str, default='adamw', choices=['adam', 'adamw', 'sgd'],
+                        help='Optimizer to use (adamw, adam, or sgd)')
     parser.add_argument('--use_curriculum', action='store_true',
                         help='Use curriculum learning (gradually increase sequence length)')
     

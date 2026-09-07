@@ -24,7 +24,18 @@ class BaseTokenizerWrapper(ABC):
     def get_pad_token_id(self):
         pass
 
+    def get_eos_token_id(self):
+        """ID of the end-of-sequence token, or None if the tokenizer has none."""
+        return None
+
+    def get_special_token_ids(self):
+        """IDs of every special (non-text) token, used to suppress them during sampling."""
+        return []
+
 class ByteLevelBPETokenizerWrapper(BaseTokenizerWrapper):
+    SPECIAL_TOKENS = ["<s>", "</s>", "<pad>", "<unk>"]
+    EOS_TOKEN = "</s>"
+
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
         self._vocab_size = len(self.tokenizer.get_vocab())
@@ -45,9 +56,16 @@ class ByteLevelBPETokenizerWrapper(BaseTokenizerWrapper):
     
     def get_vocab_size(self):
         return self._vocab_size
-    
+
     def get_pad_token_id(self):
         return 0  # Default pad token ID
+
+    def get_eos_token_id(self):
+        return self.tokenizer.token_to_id(self.EOS_TOKEN)
+
+    def get_special_token_ids(self):
+        ids = [self.tokenizer.token_to_id(token) for token in self.SPECIAL_TOKENS]
+        return [token_id for token_id in ids if token_id is not None]
 
 class HuggingFaceTokenizerWrapper(BaseTokenizerWrapper):
     def __init__(self, tokenizer):
@@ -67,9 +85,15 @@ class HuggingFaceTokenizerWrapper(BaseTokenizerWrapper):
     
     def get_vocab_size(self):
         return len(self.tokenizer)
-    
+
     def get_pad_token_id(self):
         return self.tokenizer.pad_token_id
+
+    def get_eos_token_id(self):
+        return self.tokenizer.eos_token_id
+
+    def get_special_token_ids(self):
+        return list(self.tokenizer.all_special_ids)
 
 def train_byte_level_tokenizer(dataset_type, vocab_size=50000, min_frequency=2):
     """

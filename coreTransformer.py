@@ -163,10 +163,16 @@ class SmallTransformer(nn.Module):
     def __init__(self, vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_len, dropout):
         super(SmallTransformer, self).__init__()
         
-        # Store parameters for easy access
+        # Store parameters for easy access. These are what training.py records in the
+        # checkpoint config and what inference.py rebuilds the model from, so every
+        # constructor argument that affects the architecture has to be kept here.
+        self.vocab_size = vocab_size
         self.d_model = d_model
+        self.num_heads = num_heads
         self.num_layers = num_layers
+        self.d_ff = d_ff
         self.max_seq_len = max_seq_len
+        self.dropout_p = dropout
         
         # Token embedding
         self.embedding = nn.Embedding(vocab_size, d_model)

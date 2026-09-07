@@ -40,15 +40,76 @@ def get_curriculum_length(epoch, num_epochs, min_length=64, max_length=512):
     Returns:
         int: Current sequence length for this epoch
     """
-    # Reach max_length by the half-way point of training
-    return min(max_length, min_length + (max_length - min_length) * (epoch / (num_epochs // 2)))
+    # Reach max_length by the half-way point of training. max() guards the single-epoch
+    # case, where num_epochs // 2 would be zero.
+    ramp_epochs = max(1, num_epochs // 2)
+    return min(max_length, min_length + (max_length - min_length) * (epoch / ramp_epochs))
+
+def model_config(model):
+    """
+    Record the architecture of a model so inference can rebuild it.
+
+    Every value is read off the model itself rather than off the training arguments,
+    so the config always describes the weights it is saved next to.
+
+    Args:
+        model: The model being checkpointed
+
+    Returns:
+        dict: Architecture hyperparameters. Attributes the model does not expose are
+            omitted rather than recorded as None, so that a reader's fallbacks still fire.
+    """
+    attributes = {
+        'vocab_size': 'vocab_size',
+        'd_model': 'd_model',
+        'num_heads': 'num_heads',
+        'num_layers': 'num_layers',
+        'd_ff': 'd_ff',
+        'max_seq_len': 'max_seq_len',
+        'dropout': 'dropout_p',
+    }
+    config = {}
+    for key, attribute in attributes.items():
+        value = getattr(model, attribute, None)
+        if value is not None:
+            config[key] = value
+    return config
+
+def save_checkpoint(path, epoch, model, optimizer, scheduler, scaler, loss,
+                    train_losses, val_losses, extra_config=None):
+    """
+    Write a training checkpoint.
+
+    Args:
+        path: Destination file
+        epoch: Epoch index being saved
+        model, optimizer, scheduler, scaler: Training state to serialize
+        loss: Validation loss associated with this checkpoint
+        train_losses, val_losses: Loss history so far
+        extra_config: Training settings to record alongside the architecture
+    """
+    config = model_config(model)
+    if extra_config:
+        config.update(extra_config)
+
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'loss': loss,
+        'train_losses': train_losses,
+        'val_losses': val_losses,
+        'scaler_state_dict': scaler.state_dict(),
+        'config': config,
+    }, path, pickle_protocol=5, _use_new_zipfile_serialization=True)
 
 def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
                 accumulation_steps=16, max_grad_norm=0.5, use_curriculum=False,
-                checkpoint_path='best_model.pt', checkpoint_freq=5):
+                checkpoint_path='best_model.pt', checkpoint_freq=5, optimizer_type='adamw'):
     """
     Train a transformer model with optional curriculum learning.
-    
+
     Args:
         model: The model to train
         train_loader: DataLoader for training data
@@ -60,31 +121,59 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
         use_curriculum: Whether to use curriculum learning (gradually increase sequence length)
         checkpoint_path: Path to save the best model
         checkpoint_freq: Frequency (in epochs) to save checkpoints
-    
+        optimizer_type: One of 'adam', 'adamw' or 'sgd'
+
     Returns:
         tuple: (trained model, training losses, validation losses)
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
-    # Calculate total steps
-    total_steps = (len(train_loader) // accumulation_steps) * num_epochs
+    # Calculate total optimizer steps. On a small dataset len(train_loader) can be below
+    # accumulation_steps, which would otherwise leave total_steps at 0 -- that makes
+    # OneCycleLR raise and collapses the MultiStepLR milestones onto step 0, where gamma
+    # gets applied twice before the first batch.
+    total_steps = max(1, (len(train_loader) // accumulation_steps) * num_epochs)
     
-    # Improved optimizer settings
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=1e-4,
-        betas=(0.9, 0.999),
-        eps=1e-8,
-        weight_decay=0.01
-    )
+    # Setup optimizer based on chosen type
+    if optimizer_type.lower() == 'adam':
+        optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=1e-4,
+            betas=(0.9, 0.999),
+            eps=1e-8
+        )
+        print("Using Adam optimizer")
+    elif optimizer_type.lower() == 'sgd':
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=0.01,
+            momentum=0.9,
+            weight_decay=0.0001
+        )
+        print("Using SGD optimizer with momentum")
+    else:  # default to AdamW
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=1e-4,
+            betas=(0.9, 0.999),
+            eps=1e-8,
+            weight_decay=0.01
+        )
+        print("Using AdamW optimizer")
     
     # Learning rate scheduler
+    # Set base criteria
+    criterion = nn.CrossEntropyLoss(ignore_index=-100, label_smoothing=0.1)
+    
+    # Configure scheduler based on training approach, then optimizer. Curriculum learning
+    # is checked first so that --optimizer sgd --use_curriculum still gets the OneCycle
+    # setup the max_lr below was written for.
     if use_curriculum:
         # OneCycleLR scheduler for curriculum learning
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
-            max_lr=5e-4,
+            max_lr=0.1 if optimizer_type.lower() == 'sgd' else 5e-4,
             total_steps=total_steps,
             pct_start=0.3,
             anneal_strategy='cos',
@@ -94,7 +183,19 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
             base_momentum=0.85,
             max_momentum=0.95
         )
+        print("Using OneCycleLR scheduler with curriculum learning")
+        # Higher label smoothing for curriculum learning
         criterion = nn.CrossEntropyLoss(ignore_index=-100, label_smoothing=0.15)
+    elif optimizer_type.lower() == 'sgd':
+        # For SGD, use a multi-step LR scheduler. Milestones must be distinct and past
+        # step 0, or gamma is applied repeatedly before training starts.
+        milestones = sorted({max(1, total_steps // 3), max(2, 2 * total_steps // 3)})
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer,
+            milestones=milestones,
+            gamma=0.1
+        )
+        print(f"Using MultiStepLR scheduler with milestones at steps {milestones}")
     else:
         # Cosine scheduler with warmup for standard training
         scheduler = get_cosine_schedule_with_warmup(
@@ -103,7 +204,7 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
             num_training_steps=total_steps,
             num_cycles=0.5
         )
-        criterion = nn.CrossEntropyLoss(ignore_index=-100, label_smoothing=0.1)
+        print("Using cosine scheduler with warmup")
     
     # Setup for mixed precision training
     scaler = torch.amp.GradScaler('cuda')
@@ -113,7 +214,15 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
     patience_counter = 0
     train_losses = []
     val_losses = []
-    
+    epoch = 0
+    avg_val_loss = float('inf')
+
+    # Training settings worth recording next to the architecture
+    training_config = {
+        'use_curriculum': use_curriculum,
+        'optimizer_type': optimizer_type,
+    }
+
     print(f"Starting training on {device} with {'curriculum' if use_curriculum else 'standard'} learning")
     print(f"Number of batches: {len(train_loader)}")
     print(f"Accumulation steps: {accumulation_steps}")
@@ -222,22 +331,10 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
                 best_val_loss = avg_val_loss
                 patience_counter = 0
                 print("Saving best model...")
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'loss': best_val_loss,
-                    'train_losses': train_losses,
-                    'val_losses': val_losses,
-                    'scaler_state_dict': scaler.state_dict(),
-                    'config': {
-                        'use_curriculum': use_curriculum,
-                        'd_model': getattr(model, 'd_model', 256),
-                        'num_heads': getattr(model, 'num_heads', 8),
-                        'num_layers': getattr(model, 'num_layers', 6),
-                    }
-                }, checkpoint_path, pickle_protocol=5, _use_new_zipfile_serialization=True)
+                save_checkpoint(
+                    checkpoint_path, epoch, model, optimizer, scheduler, scaler,
+                    best_val_loss, train_losses, val_losses, training_config
+                )
             else:
                 patience_counter += 1
                 if patience_counter >= patience:
@@ -246,35 +343,31 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
             
             # Save checkpoint at regular intervals
             if (epoch + 1) % checkpoint_freq == 0:
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'loss': avg_val_loss,
-                    'train_losses': train_losses,
-                    'val_losses': val_losses,
-                    'scaler_state_dict': scaler.state_dict(),
-                }, f'checkpoint_epoch_{epoch+1}.pt', pickle_protocol=5, _use_new_zipfile_serialization=True)
-                
+                save_checkpoint(
+                    f'checkpoint_epoch_{epoch+1}.pt', epoch, model, optimizer, scheduler,
+                    scaler, avg_val_loss, train_losses, val_losses, training_config
+                )
+
     except KeyboardInterrupt:
         print("Training interrupted by user. Saving checkpoint...")
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
-            'loss': avg_val_loss,
-            'train_losses': train_losses,
-            'val_losses': val_losses,
-            'scaler_state_dict': scaler.state_dict(),
-        }, 'interrupted_checkpoint.pt', pickle_protocol=5, _use_new_zipfile_serialization=True)
-        
-    except Exception as e:
-        print(f"Training interrupted by error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-    
+        save_checkpoint(
+            'interrupted_checkpoint.pt', epoch, model, optimizer, scheduler, scaler,
+            avg_val_loss, train_losses, val_losses, training_config
+        )
+
+    except Exception:
+        # Do not swallow the failure: callers previously received a partially trained
+        # model back and reported success. Save what there is, then let it propagate.
+        print("Training failed. Saving a recovery checkpoint before re-raising...")
+        try:
+            save_checkpoint(
+                'failed_checkpoint.pt', epoch, model, optimizer, scheduler, scaler,
+                avg_val_loss, train_losses, val_losses, training_config
+            )
+        except Exception as save_error:
+            print(f"Could not save recovery checkpoint: {save_error}")
+        raise
+
     return model, train_losses, val_losses
 
 def main():
@@ -292,41 +385,56 @@ def main():
                         help='Gradient accumulation steps (default: 8)')
     parser.add_argument('--max_length', type=int, default=512,
                         help='Maximum sequence length (default: 512)')
-    parser.add_argument('--d_model', type=int, default=256,
-                        help='Model dimension (default: 256)')
-    parser.add_argument('--num_heads', type=int, default=8,
-                        help='Number of attention heads (default: 8)')
-    parser.add_argument('--num_layers', type=int, default=6,
-                        help='Number of transformer layers (default: 6)')
-    parser.add_argument('--d_ff', type=int, default=1024,
-                        help='Feed-forward dimension (default: 1024)')
-    parser.add_argument('--dropout', type=float, default=0.1,
-                        help='Dropout rate (default: 0.1)')
+    parser.add_argument('--optimizer', type=str, default='adamw', choices=['adam', 'adamw', 'sgd'],
+                        help='Optimizer to use (default: adamw)')
     parser.add_argument('--use_curriculum', action='store_true',
                         help='Use curriculum learning (gradually increase sequence length)')
     parser.add_argument('--output_dir', type=str, default='.',
                         help='Directory to save model checkpoints')
-    
+    parser.add_argument('--use_ollama', action='store_true',
+                        help='Not supported for training; use inference.py --use_ollama instead')
+    # Model training parameters
+    parser.add_argument('--d_model', type=int, default=256,
+                        help='Model dimension')
+    parser.add_argument('--num_heads', type=int, default=8,
+                        help='Number of attention heads')
+    parser.add_argument('--num_layers', type=int, default=6,
+                        help='Number of transformer layers')
+    parser.add_argument('--d_ff', type=int, default=1024,
+                        help='Feed-forward dimension')
+    parser.add_argument('--dropout', type=float, default=0.1,
+                        help='Dropout rate')
+
     args = parser.parse_args()
-    
+
+    if args.use_ollama:
+        # Ollama serves generations over HTTP, so there are no parameters to optimize and
+        # no gradients to backpropagate. It is an inference backend only.
+        parser.error(
+            "--use_ollama is not supported for training: an Ollama model is served over "
+            "HTTP and exposes no trainable parameters or gradients. Use it for generation "
+            "instead: python inference.py --use_ollama --ollama_model <name>"
+        )
+
     os.makedirs(args.output_dir, exist_ok=True)
-    
+
     print(f"Training on {args.dataset} dataset")
-    print(f"Model configuration: d_model={args.d_model}, num_heads={args.num_heads}, num_layers={args.num_layers}")
-    print(f"Using {'curriculum' if args.use_curriculum else 'standard'} learning")
-    
+    print(f"Model: d_model={args.d_model}, num_heads={args.num_heads}, "
+          f"num_layers={args.num_layers}, d_ff={args.d_ff}, dropout={args.dropout}")
+    print(f"Using {args.optimizer} optimizer with {'curriculum' if args.use_curriculum else 'standard'} learning")
+
     # Import here to avoid circular imports
-    from coreTransformer import SmallTransformer
     from dataloader import get_dataloaders
-    
+
     # Load data
     train_loader, val_loader, tokenizer = get_dataloaders(
         batch_size=args.batch_size,
         max_length=args.max_length,
         dataset_type=args.dataset
     )
-    
+
     # Create model
+    from coreTransformer import SmallTransformer
     model = SmallTransformer(
         vocab_size=tokenizer.get_vocab_size(),
         d_model=args.d_model,
@@ -336,12 +444,7 @@ def main():
         max_seq_len=args.max_length,
         dropout=args.dropout
     )
-    
-    # Set attributes for easier tracking in checkpoints
-    model.d_model = args.d_model
-    model.num_heads = args.num_heads
-    model.num_layers = args.num_layers
-    
+
     # Train model
     checkpoint_path = os.path.join(args.output_dir, 'best_model.pt')
     model, train_losses, val_losses = train_model(
@@ -352,9 +455,10 @@ def main():
         patience=args.patience,
         accumulation_steps=args.accumulation_steps,
         use_curriculum=args.use_curriculum,
-        checkpoint_path=checkpoint_path
+        checkpoint_path=checkpoint_path,
+        optimizer_type=args.optimizer
     )
-    
+
     print(f"\nTraining completed. Best model saved to {checkpoint_path}")
 
 if __name__ == "__main__":
