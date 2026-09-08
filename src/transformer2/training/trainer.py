@@ -7,6 +7,8 @@ import torch.cuda.amp as amp
 import os
 import argparse
 
+from transformer2.paths import checkpoint_dir, tokenizer_dir
+
 def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5):
     """
     Creates a cosine learning rate scheduler with warmup.
@@ -451,9 +453,10 @@ def main():
           f"num_layers={args.num_layers}, d_ff={args.d_ff}, dropout={args.dropout}")
     print(f"Using {args.optimizer} optimizer with {'curriculum' if args.use_curriculum else 'standard'} learning")
 
-    # Import here to avoid circular imports
+    # get_dataloaders stays deferred: the CLI test patches it before calling main(),
+    # and importing it drags in the heavy data stack. read_tokenizer_meta pulls in
+    # transformers for the same reason.
     from transformer2.data.loaders import get_dataloaders
-    from transformer2.paths import checkpoint_dir, tokenizer_dir
     from transformer2.tokenization.bpe import read_tokenizer_meta
 
     # Load data

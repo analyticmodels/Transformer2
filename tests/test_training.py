@@ -236,6 +236,52 @@ class TestCommandLine:
             training.main()
         return captured
 
+    def _run_main_without_output_dir(self, argv):
+        """As _run_main, but deliberately omits --output_dir."""
+        captured = {}
+
+        def fake_train_model(model=None, **kwargs):
+            captured['kwargs'] = kwargs
+            return model, [], []
+
+        class FakeTokenizer:
+            def get_vocab_size(self): return 100
+
+        loaders = (MagicMock(), MagicMock(), FakeTokenizer())
+        with patch('transformer2.data.loaders.get_dataloaders', return_value=loaders), \
+             patch.object(training, 'train_model', side_effect=fake_train_model), \
+             patch.object(sys, 'argv', ['t2-train'] + argv):
+            training.main()
+        return captured
+
+    def test_runs_without_output_dir(self, monkeypatch, tmp_path):
+        """
+        --output_dir is optional and falls back to checkpoint_dir(). Every other CLI
+        test supplies it, so this branch went unexercised and an UnboundLocalError
+        in it shipped.
+        """
+        monkeypatch.setenv('TRANSFORMER2_CHECKPOINT_DIR', str(tmp_path))
+
+        captured = self._run_main_without_output_dir([])
+
+        assert captured['kwargs']['checkpoint_path'] == str(tmp_path / 'best_model.pt')
+
+    def test_default_checkpoint_dir_is_created(self, monkeypatch, tmp_path):
+        target = tmp_path / 'made' / 'here'
+        monkeypatch.setenv('TRANSFORMER2_CHECKPOINT_DIR', str(target))
+
+        self._run_main_without_output_dir([])
+
+        assert target.is_dir()
+
+    def test_explicit_output_dir_still_wins(self, monkeypatch, tmp_path):
+        monkeypatch.setenv('TRANSFORMER2_CHECKPOINT_DIR', str(tmp_path / 'ignored'))
+        explicit = tmp_path / 'explicit'
+
+        captured = self._run_main_without_output_dir([f'--output_dir={explicit}'])
+
+        assert captured['kwargs']['checkpoint_path'] == str(explicit / 'best_model.pt')
+
     def test_architecture_flags_reach_the_model(self, tmp_path):
         """These were parsed and then ignored in favour of hardcoded literals."""
         captured = self._run_main(

@@ -1,0 +1,7 @@
+{
+  "dataset": "tinystories",
+  "vocab_size": 50000,
+  "min_frequency": 2,
+  "source": "/home/sean/repos/Transformer2/tokenizers/tinystories/training_data.txt",
+  "vocab_sha256": "16c5c2f311ae25c165137cd69db8ceaf796b845e904b0b9b40b71070ce3819ea"
+}
