@@ -9,7 +9,7 @@ thousands of tokens, so any affordable `max_length` discards most of it.
 
 This module strips the scaffolding and rewrites the corpus as uniform chunks:
 
-    python reddit_postprocess.py --max_tokens 512
+    t2-postprocess reddit --max_tokens 512
 
 Chunks are packed from segments belonging to the *same* post, so a chunk reads as a
 continuous discussion rather than unrelated fragments glued together, while still
@@ -133,7 +133,7 @@ def postprocess_reddit_data(input_path=None, output_path=None,
     if not os.path.exists(input_path):
         raise FileNotFoundError(
             f"{input_path} not found. Collect Reddit data first:\n"
-            f"    python data_collection.py --dataset reddit"
+            f"    t2-collect --dataset reddit"
         )
 
     if tokenizer is None:

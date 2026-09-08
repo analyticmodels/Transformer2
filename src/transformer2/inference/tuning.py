@@ -6,7 +6,7 @@ This script tests various combinations of inference parameters to find the optim
 settings for text generation quality.
 
 Usage:
-    python optimize_inference.py --prompt "Your prompt here" --metric ppl
+    t2-tune --prompt "Your prompt here" --metric ppl
 """
 
 import argparse
@@ -23,8 +23,22 @@ from transformer2.paths import ensure, output_dir
 try:
     import nltk
     from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-    nltk.download('punkt', quiet=True)
-    HAS_NLTK = True
+
+    # Current NLTK tokenizes with punkt_tab; 'punkt' alone leaves word_tokenize
+    # raising LookupError. Probe rather than assume, so that a failed or offline
+    # download degrades to whitespace tokenization instead of failing every
+    # parameter combination with an error that looks empty.
+    for resource in ('punkt_tab', 'punkt'):
+        try:
+            nltk.download(resource, quiet=True)
+        except Exception:
+            pass
+    try:
+        nltk.word_tokenize("probe sentence.")
+        HAS_NLTK = True
+    except Exception:
+        print("NLTK data unavailable; falling back to whitespace tokenization.")
+        HAS_NLTK = False
 except ImportError:
     print("NLTK not installed. BLEU score calculation will be disabled.")
     print("If you want to use BLEU scores, install NLTK: pip install nltk")
@@ -220,7 +234,8 @@ def grid_search(prompt, model, tokenizer, params_grid, reference=None, num_sampl
             })
             
         except Exception as e:
-            print(f"Error with params (temp={temp}, top_k={top_k}, top_p={top_p}, rep_penalty={rep_penalty}): {e}")
+            print(f"Error with params (temp={temp}, top_k={top_k}, top_p={top_p}, "
+                  f"rep_penalty={rep_penalty}): {type(e).__name__}: {e}")
     
     # Sort results by score
     results.sort(key=lambda x: x['metrics']['score'], reverse=True)
@@ -321,6 +336,12 @@ def main():
         print(f"   Generation time: {result['generation_time']:.3f}s")
         print(f"   Generated text: {args.prompt}{result['generated_text']}")
     
+    if not results:
+        raise RuntimeError(
+            "No parameter combination produced a result. Every generation attempt "
+            "failed -- rerun with a smaller grid to see the underlying error."
+        )
+
     # Save best parameters to file
     best_params = results[0]['params']
     

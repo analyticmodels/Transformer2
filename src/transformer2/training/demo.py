@@ -7,10 +7,10 @@ This script demonstrates the complete workflow for:
 
 Usage:
     # For Bluesky training:
-    python train_demo.py --dataset bluesky
+    t2-demo --dataset bluesky
     
     # For Reddit training (credentials come from .env; see .env.example):
-    python train_demo.py --dataset reddit
+    t2-demo --dataset reddit
 """
 
 import argparse
@@ -211,7 +211,7 @@ def main():
     print("DEMO COMPLETED SUCCESSFULLY")
     print("="*80)
     print("\nYou can now use the trained model for inference with:")
-    print("python inference.py --prompt \"Your prompt here\"")
+    print("t2-generate --prompt \"Your prompt here\"")
 
 if __name__ == "__main__":
     main()

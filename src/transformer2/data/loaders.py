@@ -148,8 +148,8 @@ def load_reddit_texts(parquet_path=None):
         else:
             raise FileNotFoundError(
                 f"No Reddit corpus found. Collect and postprocess it first:\n"
-                f"    python data_collection.py --dataset reddit\n"
-                f"    python reddit_postprocess.py --max_tokens <your --max_length>"
+                f"    t2-collect --dataset reddit\n"
+                f"    t2-postprocess reddit --max_tokens <your --max_length>"
             )
 
     print(f"Loading Reddit data from {parquet_path}")
@@ -164,7 +164,7 @@ def load_reddit_texts(parquet_path=None):
         print("  WARNING: this is the unprocessed corpus. Each row still contains the")
         print("  Title:/Content:/Comment: scaffolding and may be far longer than")
         print("  max_length, so most of it will be truncated. Run:")
-        print("      python reddit_postprocess.py --max_tokens <your --max_length>")
+        print("      t2-postprocess reddit --max_tokens <your --max_length>")
     else:
         raise ValueError(
             f"{parquet_path} has neither a 'text' nor a 'combined_text' column "
@@ -325,8 +325,8 @@ def get_tinystories_dataloaders(parquet_path=None, batch_size=32, max_length=320
         else:
             raise FileNotFoundError(
                 "No TinyStories corpus found. Download and postprocess it first:\n"
-                "    python data_collection.py --dataset tinystories\n"
-                "    python tinystories_postprocess.py --max_tokens <your --max_length>"
+                "    t2-collect --dataset tinystories\n"
+                "    t2-postprocess tinystories --max_tokens <your --max_length>"
             )
 
     print(f"Loading TinyStories from {parquet_path}")

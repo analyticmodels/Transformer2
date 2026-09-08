@@ -25,6 +25,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest==9.1.1"]
 
+[project.scripts]
+t2-collect = "transformer2.data.collection:main"
+t2-postprocess = "transformer2.data.postprocess:main"
+t2-tokenizer = "transformer2.tokenization.bpe:main"
+t2-train = "transformer2.training.trainer:main"
+t2-generate = "transformer2.inference.generate:main"
+t2-tune = "transformer2.inference.tuning:main"
+t2-demo = "transformer2.training.demo:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

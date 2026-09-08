@@ -1,8 +1,0 @@
-# Development / test dependencies.
-#
-#     .venv/bin/pip install -r requirements-dev.txt
-#     .venv/bin/python -m pytest
-#
--r requirements.txt
-
-pytest==9.1.1

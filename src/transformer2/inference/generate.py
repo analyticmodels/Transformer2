@@ -191,7 +191,7 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
                 f"Tokenizer vocabulary ({tokenizer_vocab_size} tokens) does not match "
                 f"checkpoint {model_path} ({architecture['vocab_size']} tokens). The "
                 f"tokenizer in tokenizer/ is not the one this model was trained with; "
-                f"regenerate it with: python tokenizer.py --dataset_type <dataset>"
+                f"regenerate it with: t2-tokenizer --dataset_type <dataset>"
             )
 
         model = SmallTransformer(dropout=0.1, **architecture)
@@ -457,10 +457,29 @@ def main():
     parser.add_argument('--num_heads', type=int, default=None,
                         help='Override the attention head count recorded in the checkpoint '
                              '(needed for checkpoints written before the config fix)')
+    parser.add_argument('--params', type=str, default=None,
+                        help='JSON file of tuned sampling parameters from t2-tune. '
+                             'Values in it override the sampling flags above.')
+    parser.add_argument('--num_samples', type=int, default=1,
+                        help='Number of samples to generate for a single prompt')
     parser.add_argument('--debug', action='store_true',
                         help='Print debug information')
 
     args = parser.parse_args()
+
+    # Tuned parameters, if supplied, replace the sampling defaults. t2-tune writes
+    # this file; reading it here means the two commands hand off without a second
+    # generation script.
+    if args.params:
+        import json
+        with open(args.params) as handle:
+            best = json.load(handle)['best_params']
+        args.temperature = best.get('temperature', args.temperature)
+        args.top_k = best.get('top_k', args.top_k)
+        args.top_p = best.get('top_p', args.top_p)
+        args.repetition_penalty = best.get('repetition_penalty', args.repetition_penalty)
+        args.max_new_tokens = best.get('max_tokens', args.max_new_tokens)
+        print(f"Using tuned parameters from {args.params}: {best}")
 
     if args.prompt:
         # Single generation mode
@@ -472,22 +491,23 @@ def main():
             num_heads=args.num_heads
         )
 
-        generated = generate_text(
-            model,
-            tokenizer,
-            args.prompt,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            top_k=args.top_k,
-            top_p=args.top_p,
-            repetition_penalty=args.repetition_penalty,
-            debug=args.debug,
-            use_ollama=args.use_ollama,
-            ollama_model=args.ollama_model
-        )
-
         print(f"\nPrompt: {args.prompt}")
-        print(f"Generated: {args.prompt}{generated}")
+        for index in range(args.num_samples):
+            generated = generate_text(
+                model,
+                tokenizer,
+                args.prompt,
+                max_new_tokens=args.max_new_tokens,
+                temperature=args.temperature,
+                top_k=args.top_k,
+                top_p=args.top_p,
+                repetition_penalty=args.repetition_penalty,
+                debug=args.debug,
+                use_ollama=args.use_ollama,
+                ollama_model=args.ollama_model
+            )
+            label = f"Sample {index + 1}: " if args.num_samples > 1 else "Generated: "
+            print(f"{label}{args.prompt}{generated}")
     else:
         # Interactive demo mode
         run_interactive_demo(

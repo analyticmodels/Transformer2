@@ -15,22 +15,35 @@ A PyTorch implementation of a transformer model for natural language generation.
 
 ## Project Structure
 
-- `coreTransformer.py` - Core transformer architecture
-- `dataloader.py` - Dataset classes and data loading utilities
-- `tokenizer.py` - Tokenization utilities (also a CLI for building the tokenizer)
-- `training.py` - Model training logic
-- `inference.py` - Model loading and text generation
-- `generate_text.py` - Generate samples using tuned parameters from a JSON file
-- `optimize_inference.py` - Grid search for generation parameters
-- `ollama_integration.py` - Ollama model/tokenizer wrappers (inference only)
-- `config.py` - Credential loading from the environment / `.env`
-- `data_collection.py` - Data collection from different sources
-- `reddit_postprocess.py` - Strip metadata from Reddit posts and chunk them for training
-- `tinystories_postprocess.py` - Normalise and length-bound the TinyStories corpus
-- `text_chunking.py` - Corpus-agnostic chunking shared by both postprocessors
-- `train_demo.py` - End-to-end collect-then-train demo script
-- `tests/` - Test suite (see [Tests](#tests))
-- `archive/` - Superseded scripts kept for reference; not part of the workflow
+The package lives under `src/` and is installed with `pip install -e .`, so it
+imports from any working directory.
+
+```
+src/transformer2/
+├── paths.py                 Where artifacts live, anchored to the project root
+├── config.py                Credentials from the environment / .env
+├── model/transformer.py     The transformer architecture
+├── tokenization/bpe.py      Byte-level BPE wrappers, one tokenizer per corpus
+├── data/
+│   ├── collection.py        Download Bluesky / TinyStories, fetch Reddit
+│   ├── postprocess.py       t2-postprocess dispatcher
+│   ├── reddit.py            Strip discussion scaffolding, chunk by post
+│   ├── tinystories.py       Normalise, deduplicate, length-bound
+│   ├── chunking.py          Corpus-agnostic chunking shared by both
+│   └── loaders.py           Datasets and DataLoaders
+├── training/
+│   ├── trainer.py           Training loop and checkpointing
+│   └── demo.py              End-to-end collect-then-train demo
+└── inference/
+    ├── generate.py          Checkpoint loading and sampling
+    ├── tuning.py            Grid search over generation parameters
+    └── ollama.py            Ollama backend (inference only)
+```
+
+Artifacts sit outside the source tree: `data/` (corpora), `checkpoints/`,
+`tokenizers/<corpus>/`, `outputs/`. `tests/` holds the suite, `tools/` holds
+unpackaged dev scripts, and `archive/` holds superseded code that is kept for
+reference and is not runnable.
 
 ## Installation
 
@@ -48,12 +61,11 @@ A PyTorch implementation of a transformer model for natural language generation.
 3. Install dependencies:
 
    ```bash
-   .venv/bin/pip install -r requirements.txt
+   .venv/bin/pip install -e .
    ```
 
-   `requirements.txt` covers everything the project imports, including the Reddit
-   collector (`praw`) and the optional BLEU scoring in `optimize_inference.py`
-   (`nltk`). For the test suite as well, use `requirements-dev.txt` instead.
+   This installs the dependencies and puts the seven `t2-*` commands on your PATH.
+   Add the test suite with `.venv/bin/pip install -e ".[dev]"`.
 
 4. Configure credentials (only needed for Reddit collection or private Hugging Face
    models):
@@ -80,30 +92,30 @@ No API key, token or secret belongs anywhere in the source tree.
 
 | Variable | Used by |
 |---|---|
-| `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | `data_collection.py --dataset reddit`, `train_demo.py` |
+| `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | `t2-collect --dataset reddit`, `t2-demo` |
 | `REDDIT_USER_AGENT` | Reddit collection (optional; has a default) |
-| `HUGGINGFACE_TOKEN` | `testHFToken.py`, private model downloads |
+| `HUGGINGFACE_TOKEN` | `tools/check_hf_token.py`, private model downloads |
 
 The Reddit CLI flags (`--client_id`, `--client_secret`) still work but are
 discouraged: arguments are visible in shell history and in the process list.
 
 ## Usage
 
-All commands below assume the virtual environment, either via `.venv/bin/python`
-or after `source .venv/bin/activate`.
+The `t2-*` commands are installed into the virtual environment. Prefix them with
+`.venv/bin/` or run `source .venv/bin/activate` first. They work from any directory.
 
 ### Data Collection
 
 ```bash
 # TinyStories: ~2.1M synthetic short stories (~250M tokens)
-python data_collection.py --dataset tinystories
-python tinystories_postprocess.py --max_tokens 320
+t2-collect --dataset tinystories
+t2-postprocess tinystories --max_tokens 320
 
 # Collect Bluesky data
-python data_collection.py --dataset bluesky --max_samples 10000
+t2-collect --dataset bluesky --max_samples 10000
 
 # Collect Reddit data
-python data_collection.py --dataset reddit   # credentials from .env
+t2-collect --dataset reddit   # credentials from .env
 ```
 
 `--max_samples` defaults to collecting **everything**. Pass it explicitly to cap a
@@ -121,7 +133,7 @@ learn to reproduce, and a single thread can run to tens of thousands of tokens, 
 almost all of it would be truncated away. Rewrite the corpus before training:
 
 ```bash
-python reddit_postprocess.py --max_tokens 512   # match your training --max_length
+t2-postprocess reddit --max_tokens 512   # match your training --max_length
 ```
 
 This strips the labels, URLs, markdown, `/u/` and `/r/` references and deleted
@@ -145,10 +157,12 @@ Titles are excluded as metadata; pass `--keep_titles` to include them.
 
 ### Tokenizer
 
-The tokenizer is built once from the collected data and cached in `tokenizer/`:
+Each corpus gets its own tokenizer under `tokenizers/<corpus>/`, recorded with a
+`meta.json` that fingerprints the vocabulary. Training writes that fingerprint into
+the checkpoint, and inference refuses a checkpoint whose tokenizer no longer matches:
 
 ```bash
-python tokenizer.py --dataset_type bluesky --vocab_size 50000
+t2-tokenizer --dataset_type bluesky --vocab_size 50000
 ```
 
 Training and inference both create it on demand if it is missing, but doing it
@@ -160,17 +174,17 @@ refuses to load a mismatched pair rather than producing garbage.
 
 ```bash
 # Standard training
-python training.py --dataset bluesky --batch_size 8 --epochs 30
+t2-train --dataset bluesky --batch_size 8 --epochs 30
 
 # Curriculum learning
-python training.py --dataset reddit --batch_size 8 --epochs 30 --use_curriculum
+t2-train --dataset reddit --batch_size 8 --epochs 30 --use_curriculum
 
 # Custom architecture
-python training.py --dataset bluesky --d_model 512 --num_heads 16 --num_layers 8 --d_ff 2048
+t2-train --dataset bluesky --d_model 512 --num_heads 16 --num_layers 8 --d_ff 2048
 ```
 
-The best model by validation loss is written to `best_model.pt`, with periodic
-snapshots as `checkpoint_epoch_N.pt`. Every checkpoint records the architecture it
+The best model by validation loss is written to `checkpoints/best_model.pt`, with
+periodic snapshots as `checkpoint_epoch_N.pt` alongside it. Every checkpoint records the architecture it
 was trained with, so inference can rebuild the model without being told.
 
 `--optimizer` accepts `adamw` (default), `adam` or `sgd`. Combining `--use_curriculum`
@@ -180,13 +194,13 @@ with any optimizer selects the OneCycle schedule.
 
 ```bash
 # Interactive demo
-python inference.py
+t2-generate
 
 # Generate text from a prompt
-python inference.py --prompt "Once upon a time" --temperature 0.7 --top_k 50
+t2-generate --prompt "Once upon a time" --temperature 0.7 --top_k 50
 
 # Load a specific checkpoint
-python inference.py --model_path checkpoint_epoch_30.pt --num_heads 8 --prompt "Once upon a time"
+t2-generate --model_path checkpoints/checkpoint_epoch_10.pt --num_heads 8 --prompt "Once upon a time"
 ```
 
 `generate_text()` returns the continuation only; the prompt is not echoed back.
@@ -199,11 +213,11 @@ without error and produces noise, so a checkpoint that does not record its head
 count will not load until you supply one:
 
 ```bash
-python inference.py --model_path checkpoint_epoch_5.pt --num_heads 8 --prompt "..."
+t2-generate --model_path checkpoints/checkpoint_epoch_5.pt --num_heads 8 --prompt "..."
 ```
 
 Checkpoints written by the current `training.py` record it and need no flag.
-`generate_text.py` and `optimize_inference.py` accept `--num_heads` too.
+`t2-tune` accepts `--num_heads` too.
 
 ### Tuning Generation Parameters
 
@@ -211,8 +225,8 @@ Grid search writes the best-scoring combination to a JSON file, which the
 generation script then consumes:
 
 ```bash
-python optimize_inference.py --prompt "The future of AI is" --output inference_params.json
-python generate_text.py --prompt "The future of AI is" --params inference_params.json --num_samples 5
+t2-tune --prompt "The future of AI is"
+t2-generate --prompt "The future of AI is" --params outputs/inference_params.json --num_samples 5
 ```
 
 ### Ollama (inference only)
@@ -221,7 +235,7 @@ Generation can be served by a local [Ollama](https://ollama.com) model instead o
 trained checkpoint:
 
 ```bash
-python inference.py --use_ollama --ollama_model llama2 --prompt "Once upon a time"
+t2-generate --use_ollama --ollama_model llama2 --prompt "Once upon a time"
 ```
 
 This is an inference backend only. An Ollama model is served over HTTP and exposes
@@ -232,19 +246,19 @@ error rather than appearing to train.
 
 ```bash
 # Bluesky demo
-python train_demo.py --dataset bluesky --max_samples 10000
+t2-demo --dataset bluesky --max_samples 10000
 
 # Reddit demo
-python train_demo.py --dataset reddit   # credentials from .env
+t2-demo --dataset reddit   # credentials from .env
 
 # Reuse already-collected data
-python train_demo.py --dataset bluesky --skip_data_collection
+t2-demo --dataset bluesky --skip_data_collection
 ```
 
 ## Tests
 
 ```bash
-.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pip install -e ".[dev]"
 .venv/bin/python -m pytest
 ```
 

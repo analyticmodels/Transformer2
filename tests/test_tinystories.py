@@ -115,7 +115,7 @@ class TestPostprocess:
         assert '  ' not in blob
 
     def test_missing_input_raises_with_guidance(self, tmp_path):
-        with pytest.raises(FileNotFoundError, match="data_collection.py"):
+        with pytest.raises(FileNotFoundError, match="t2-collect"):
             postprocess_tinystories(str(tmp_path / 'absent.parquet'),
                                     str(tmp_path / 'out.parquet'),
                                     tokenizer=WordTokenizer())

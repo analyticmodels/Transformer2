@@ -14,37 +14,22 @@ under another).
 
 ## Build/Run Commands
 
-- Build the tokenizer: `.venv/bin/python tokenizer.py --dataset_type bluesky`
-- Collect data: `.venv/bin/python data_collection.py --dataset bluesky --max_samples 10000`
-- TinyStories: `.venv/bin/python data_collection.py --dataset tinystories` then `.venv/bin/python tinystories_postprocess.py --max_tokens 320`
-- Postprocess Reddit (required before training on it): `.venv/bin/python reddit_postprocess.py --max_tokens 512`
-- Train a model: `.venv/bin/python training.py --dataset [reddit|bluesky|imdb] --batch_size 8 --epochs 30`
-- End-to-end demo: `.venv/bin/python train_demo.py --dataset bluesky --skip_data_collection`
-- Generate text: `.venv/bin/python inference.py --prompt "Your prompt here"`
-- Tune generation params: `.venv/bin/python optimize_inference.py --prompt "..."`
-- Generate with tuned params: `.venv/bin/python generate_text.py --prompt "..." --params inference_params.json`
+Installed as a package: `.venv/bin/pip install -e ".[dev]"`. The `t2-*` commands
+work from any directory.
+
+- Build a tokenizer: `.venv/bin/t2-tokenizer --dataset_type bluesky`
+- Collect data: `.venv/bin/t2-collect --dataset tinystories`
+- Postprocess: `.venv/bin/t2-postprocess tinystories --max_tokens 320`
+  (or `t2-postprocess reddit --max_tokens 512`; the two take different flags)
+- Train: `.venv/bin/t2-train --dataset tinystories --max_length 320`
+- Generate: `.venv/bin/t2-generate --prompt "Your prompt here"`
+- Tune sampling: `.venv/bin/t2-tune --prompt "..."` -> `outputs/inference_params.json`
+- Generate with tuned params: `.venv/bin/t2-generate --prompt "..." --params outputs/inference_params.json`
+- End-to-end demo: `.venv/bin/t2-demo --dataset bluesky --skip_data_collection`
 - Run tests: `.venv/bin/python -m pytest`
 
 Training requires a GPU (the loop uses `torch.amp` autocast/`GradScaler` on `cuda`).
 Inference runs on either.
-
-## Project Structure
-
-- Core model: `coreTransformer.py` (transformer architecture)
-- Data handling: `dataloader.py` (dataset classes and loaders)
-- Data collection: `data_collection.py` (Reddit and Bluesky sources)
-- Reddit cleaning/chunking: `reddit_postprocess.py` -> `data/reddit_text.parquet`
-- TinyStories cleaning: `tinystories_postprocess.py` -> `data/tinystories_text.parquet`
-- Shared chunking: `text_chunking.py`
-- Tokenization: `tokenizer.py` (tokenizer wrappers plus a CLI to build the tokenizer)
-- Training: `training.py`
-- Inference: `inference.py` (loading and generation), `generate_text.py`, `optimize_inference.py`
-- Ollama backend: `ollama_integration.py` (inference only)
-- Credentials: `config.py` (reads `.env`)
-- Tests: `tests/`
-- `archive/` holds superseded scripts (`trainingSetup.py`, `curriculumTraining.py`,
-  `inferenceTest.py`, the per-dataset training demos). They are kept for reference only —
-  do not treat them as entry points or update them alongside changes.
 
 ## Code Style Guidelines
 
@@ -74,6 +59,17 @@ These encode past bugs; the test suite guards each one.
 - **Tokenizer wrappers return a mapping from `encode()`** (`['input_ids']`), not an
   `Encoding` object, and expose `get_eos_token_id()` / `get_special_token_ids()` rather
   than hardcoded ids.
+- **`data/loaders.py` must not be renamed `datasets.py`.** It imports the
+  HuggingFace `datasets` library; a sibling of the same name is the collision this
+  layout exists to avoid. Likewise never add an `__init__.py` under `tokenizers/`,
+  which would shadow the `tokenizers` package.
+- **A tokenizer is identified by its fingerprint, not its size.** Every corpus here
+  trains to 50000 tokens, so vocab size cannot tell them apart. `tokenizers/<corpus>/
+  meta.json` carries a sha256 of vocab.json; training records it in the checkpoint and
+  `load_model` refuses a mismatch.
+- **`get_dataloaders` must stay deferred inside `trainer.main()`.** The CLI test
+  patches it before calling main(); hoisting the import would run the real loader
+  against an 800 MB parquet.
 - **Reddit needs postprocessing.** The raw `combined_text` carries
   `Title:`/`Content:`/`Comment:` scaffolding and runs to tens of thousands of tokens.
   Training reads `data/reddit_text.parquet` when present and warns when it does not.

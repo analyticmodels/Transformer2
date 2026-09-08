@@ -440,7 +440,7 @@ def main():
         parser.error(
             "--use_ollama is not supported for training: an Ollama model is served over "
             "HTTP and exposes no trainable parameters or gradients. Use it for generation "
-            "instead: python inference.py --use_ollama --ollama_model <name>"
+            "instead: t2-generate --use_ollama --ollama_model <name>"
         )
 
     os.makedirs(args.output_dir, exist_ok=True)

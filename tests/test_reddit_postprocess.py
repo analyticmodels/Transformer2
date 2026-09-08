@@ -231,7 +231,7 @@ class TestEndToEnd:
         assert len(texts) == len(set(texts))
 
     def test_missing_input_raises_with_guidance(self, tmp_path):
-        with pytest.raises(FileNotFoundError, match="data_collection.py"):
+        with pytest.raises(FileNotFoundError, match="t2-collect"):
             postprocess_reddit_data(str(tmp_path / 'absent.parquet'),
                                     str(tmp_path / 'out.parquet'),
                                     tokenizer=_WordTokenizer())

@@ -279,7 +279,7 @@ def train_byte_level_tokenizer(dataset_type, vocab_size=50000, min_frequency=2):
         else:
             raise FileNotFoundError(
                 "No TinyStories corpus found. Download it first:\n"
-                "    python data_collection.py --dataset tinystories"
+                "    t2-collect --dataset tinystories"
             )
 
     elif dataset_type == "wikitext":
@@ -371,7 +371,7 @@ def create_tokenizer(dataset_type, tokenizer_type="byte-level-bpe", *,
     if not (vocab.is_file() and merges.is_file()):
         raise FileNotFoundError(
             f"No tokenizer for '{dataset_type}' at {directory}. Build one with:\n"
-            f"    python tokenizer.py --dataset_type {dataset_type}"
+            f"    t2-tokenizer --dataset_type {dataset_type}"
         )
 
     tokenizer = ByteLevelBPETokenizer.from_file(str(vocab), str(merges))

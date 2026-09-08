@@ -5,7 +5,7 @@ TinyStories arrives as clean prose, so unlike the Reddit collection there is no
 scaffolding to strip. What it does need is normalisation, deduplication, and a
 guarantee that no story exceeds the training sequence length:
 
-    python tinystories_postprocess.py --max_tokens 320
+    t2-postprocess tinystories --max_tokens 320
 
 Each story is a self-contained document, so stories are never packed together: a
 chunk that ran from the end of one story into the start of an unrelated one would
@@ -80,7 +80,7 @@ def postprocess_tinystories(input_path=None, output_path=None,
     if not os.path.exists(input_path):
         raise FileNotFoundError(
             f"{input_path} not found. Download it first:\n"
-            f"    python data_collection.py --dataset tinystories"
+            f"    t2-collect --dataset tinystories"
         )
 
     if tokenizer is None:
