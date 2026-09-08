@@ -7,9 +7,9 @@ from datasets import load_dataset
 
 from config import reddit_credentials
 
-# Set constants
+# Set constants. Directories are created at write time, not import time: importing
+# this module (tests do) must not litter the working directory.
 DATA_DIR = "data"
-os.makedirs(DATA_DIR, exist_ok=True)
 
 def download_bluesky_dataset(output_path="data/bluesky_posts.parquet", max_samples=10000):
     """

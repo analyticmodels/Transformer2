@@ -413,8 +413,8 @@ def run_interactive_demo(model_path='best_model.pt', dataset_type="bluesky", use
         except Exception as e:
             print(f"Error generating text: {e}")
 
-# Main function for CLI usage
-if __name__ == "__main__":
+def main():
+    """CLI entry point: generate from a prompt, or run the interactive demo."""
     import argparse
     
     parser = argparse.ArgumentParser(description='Text generation with transformer models')
@@ -481,3 +481,7 @@ if __name__ == "__main__":
             ollama_model=args.ollama_model,
             num_heads=args.num_heads
         )
+
+
+if __name__ == "__main__":
+    main()

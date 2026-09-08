@@ -1,4 +1,3 @@
-from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 import torch
 from transformers import PreTrainedTokenizerFast, GPT2Tokenizer
@@ -419,103 +418,29 @@ def get_tinystories_dataloaders(parquet_path=None, batch_size=32, max_length=320
     return train_loader, val_loader, tokenizer
 
 
-def get_dataloaders(batch_size=32, max_length=512, dataset_type="imdb"):
+def get_dataloaders(batch_size=32, max_length=512, dataset_type="bluesky"):
     """
     Get dataloaders for training.
-    
+
     Args:
         batch_size (int): Batch size for training
         max_length (int): Maximum sequence length
-        dataset_type (str): Type of dataset to use ('imdb', 'reddit', or 'bluesky')
-        
+        dataset_type (str): One of 'bluesky', 'reddit', 'tinystories'
+
     Returns:
         tuple: (train_loader, val_loader, tokenizer)
+
+    Raises:
+        ValueError: If dataset_type is not one of the supported corpora
     """
     if dataset_type == "tinystories":
         return get_tinystories_dataloaders(batch_size=batch_size, max_length=max_length)
     if dataset_type == "reddit":
         return get_reddit_dataloaders(batch_size=batch_size, max_length=max_length)
-    elif dataset_type == "bluesky":
+    if dataset_type == "bluesky":
         return get_bluesky_dataloaders(batch_size=batch_size, max_length=max_length)
-    
-    #
-    dataset = load_dataset("imdb")
-    
-    # Initialize tokenizer
-    tokenizer = ByteLevelBPETokenizer()
-    
-    # Create vocabulary from IMDB data
-    def batch_iterator():
-        for i in range(0, len(dataset['train']), 1000):
-            yield dataset['train'][i:i + 1000]['text']
-    
-    # Train tokenizer on IMDB data
-    tokenizer.train_from_iterator(
-        batch_iterator(),
-        vocab_size=50000,
-        min_frequency=2,
-        special_tokens=["<s>", "</s>", "<pad>", "<unk>"]
+
+    raise ValueError(
+        f"Unsupported dataset_type {dataset_type!r}. "
+        f"Choose one of: bluesky, reddit, tinystories."
     )
-    
-    # Save tokenizer
-    os.makedirs("tokenizer", exist_ok=True)
-    tokenizer.save_model("tokenizer")
-    
-    class IMDBDataset(Dataset):
-        def __init__(self, data, tokenizer, max_length):
-            self.texts = data['text']
-            self.tokenizer = tokenizer
-            self.max_length = max_length
-        
-        def __len__(self):
-            return len(self.texts)
-        
-        def __getitem__(self, idx):
-            text = self.texts[idx]
-            encoding = self.tokenizer.encode(text)
-            
-            # Ensure proper padding and truncation
-            input_ids = torch.tensor(encoding.ids[:self.max_length], dtype=torch.long)
-            attention_mask = torch.ones_like(input_ids)
-            
-            # Pad if necessary
-            if len(input_ids) < self.max_length:
-                padding_length = self.max_length - len(input_ids)
-                input_ids = torch.cat([input_ids, torch.zeros(padding_length, dtype=torch.long)])
-                attention_mask = torch.cat([attention_mask, torch.zeros(padding_length, dtype=torch.long)])
-            
-            # Create shifted labels for language modeling
-            labels = input_ids.clone()
-            labels[:-1] = input_ids[1:]
-            labels[-1] = -100
-            
-            return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask,
-                'labels': labels
-            }
-    
-    # Create datasets
-    train_dataset = IMDBDataset(dataset['train'], tokenizer, max_length)
-    val_dataset = IMDBDataset(dataset['test'], tokenizer, max_length)
-    
-    # Create dataloaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=True,
-        persistent_workers=True
-    )
-    
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        persistent_workers=True
-    )
-    
-    return train_loader, val_loader, tokenizer

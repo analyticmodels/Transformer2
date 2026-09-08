@@ -333,40 +333,55 @@ def create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="wikitext", *
     else:
         raise ValueError(f"Unknown tokenizer type: {tokenizer_type}")
 
-# Only execute this code if the file is run directly (not imported)
-if __name__ == "__main__":
+def main():
+    """Build (or reuse) the byte-level BPE tokenizer for a dataset."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Prepare tokenizer for transformer model")
-    parser.add_argument('--dataset_type', type=str, default='bluesky', choices=['bluesky', 'reddit', 'wikitext', 'imdb', 'tinystories'],
-                       help='Dataset to use for tokenizer training (bluesky, reddit, wikitext, imdb)')
+    parser.add_argument('--dataset_type', type=str, default='bluesky',
+                        choices=['bluesky', 'reddit', 'wikitext', 'tinystories'],
+                        help='Dataset to build the tokenizer from')
     parser.add_argument('--vocab_size', type=int, default=50000,
-                       help='Vocabulary size for the tokenizer')
+                        help='Vocabulary size for the tokenizer')
     parser.add_argument('--min_frequency', type=int, default=2,
-                       help='Minimum frequency for a token to be included in vocabulary')
-    
+                        help='Minimum frequency for a token to be included in vocabulary')
+    parser.add_argument('--force', action='store_true',
+                        help='Rebuild even if a cached tokenizer is present')
+
     args = parser.parse_args()
-    
+
     print(f"Preparing tokenizer with {args.dataset_type} dataset...")
-    
-    # Create tokenizer training data if needed
-    if not os.path.exists("tokenizer/training_data.txt"):
-        print("Creating tokenizer training data...")
-        # Load and prepare dataset for tokenizer training
-        train_byte_level_tokenizer(args.dataset_type, vocab_size=args.vocab_size, min_frequency=args.min_frequency)
-    
-    # Now create the tokenizer
+
+    # Rebuild when asked, or when no tokenizer is cached. The previous guard tested
+    # for tokenizer/training_data.txt, which exists as soon as ANY corpus has been
+    # processed -- so --dataset_type was silently ignored and the cached vocabulary
+    # from a different corpus was loaded instead.
+    cached = os.path.exists("tokenizer/vocab.json") and os.path.exists("tokenizer/merges.txt")
+    if args.force or not cached:
+        print(f"Building tokenizer from the {args.dataset_type} corpus...")
+        train_byte_level_tokenizer(
+            args.dataset_type,
+            vocab_size=args.vocab_size,
+            min_frequency=args.min_frequency,
+        )
+    else:
+        print("Reusing the cached tokenizer in tokenizer/.")
+        print("  WARNING: the cached tokenizer records no corpus, so it may not be the")
+        print(f"  one for --dataset_type {args.dataset_type}. Pass --force to rebuild.")
+
     tokenizer = create_tokenizer(
-        tokenizer_type="byte-level-bpe", 
+        tokenizer_type="byte-level-bpe",
         dataset_type=args.dataset_type,
         vocab_size=args.vocab_size,
-        min_frequency=args.min_frequency
+        min_frequency=args.min_frequency,
     )
-    
-    # Test the tokenizer
-    prompt = "Hello, how are you?"
-    encoded = tokenizer.encode(prompt)
+
+    encoded = tokenizer.encode("Hello, how are you?")
     print(f"Tokenizer test - Encoded: {encoded}")
-    
+    print(f"Vocabulary size: {tokenizer.get_vocab_size()}")
     print("\nTokenizer preparation complete.")
-    print("You can now use inference.py for text generation.")
+    return tokenizer
+
+
+if __name__ == "__main__":
+    main()

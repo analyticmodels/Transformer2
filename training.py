@@ -373,7 +373,7 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
 def main():
     """Main function to run training from the command line."""
     parser = argparse.ArgumentParser(description='Train transformer model on text data')
-    parser.add_argument('--dataset', type=str, default='reddit', choices=['imdb', 'reddit', 'bluesky', 'tinystories'],
+    parser.add_argument('--dataset', type=str, default='reddit', choices=['reddit', 'bluesky', 'tinystories'],
                         help='Dataset to use for training (default: reddit)')
     parser.add_argument('--batch_size', type=int, default=8,
                         help='Batch size for training (default: 8)')
