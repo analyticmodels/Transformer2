@@ -6,7 +6,9 @@ head count there produces a silently mis-shaped model at inference time), and th
 hyperparameters must actually reach the model.
 """
 
+import inspect
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +19,12 @@ import training
 from conftest import requires_cuda
 from coreTransformer import SmallTransformer
 from inference import infer_architecture
-from training import get_curriculum_length, model_config, save_checkpoint
+from training import (
+    get_curriculum_length,
+    model_config,
+    save_checkpoint,
+    sibling_checkpoint,
+)
 
 
 class ToyDataset(Dataset):
@@ -268,3 +275,39 @@ class TestCommandLine:
         """
         with pytest.raises(TypeError):
             training.train_model(None, None, None, definitely_not_a_parameter=1)
+
+
+class TestSiblingCheckpoint:
+    """
+    Periodic, interrupted and failed checkpoints must land beside the best model.
+    They used to be written to the process working directory while only the best
+    model honoured --output_dir, scattering one run across two locations.
+    """
+
+    def test_resolves_into_the_checkpoint_directory(self):
+        assert sibling_checkpoint('/tmp/out/best_model.pt', 'checkpoint_epoch_5.pt') == \
+            '/tmp/out/checkpoint_epoch_5.pt'
+
+    def test_bare_filename_stays_bare(self):
+        """checkpoint_path with no directory keeps the historical CWD behaviour."""
+        assert sibling_checkpoint('best_model.pt', 'failed_checkpoint.pt') == \
+            'failed_checkpoint.pt'
+
+    @pytest.mark.parametrize("name", [
+        'checkpoint_epoch_1.pt', 'interrupted_checkpoint.pt', 'failed_checkpoint.pt',
+    ])
+    def test_every_auxiliary_kind_follows_output_dir(self, tmp_path, name):
+        resolved = sibling_checkpoint(str(tmp_path / 'best_model.pt'), name)
+
+        assert Path(resolved).parent == tmp_path
+
+    def test_train_model_writes_auxiliaries_beside_the_best_model(self, tmp_path):
+        """
+        Guard against the literals coming back: assert the source routes all three
+        through the helper rather than naming a bare file.
+        """
+        source = inspect.getsource(training.train_model)
+
+        for literal in ("'interrupted_checkpoint.pt'", "'failed_checkpoint.pt'"):
+            assert f"sibling_checkpoint(checkpoint_path, {literal})" in source
+        assert "sibling_checkpoint(checkpoint_path, f'checkpoint_epoch_" in source

@@ -104,6 +104,24 @@ def save_checkpoint(path, epoch, model, optimizer, scheduler, scaler, loss,
         'config': config,
     }, path, pickle_protocol=5, _use_new_zipfile_serialization=True)
 
+def sibling_checkpoint(checkpoint_path, name):
+    """
+    Place an auxiliary checkpoint beside the main one.
+
+    Periodic, interrupted and failed checkpoints used to be written to the process
+    working directory while only the best model honoured --output_dir, so a single
+    run scattered its output across two locations.
+
+    Args:
+        checkpoint_path (str): Path the best model is written to
+        name (str): Bare filename for the auxiliary checkpoint
+
+    Returns:
+        str: `name` resolved into the same directory as checkpoint_path
+    """
+    return os.path.join(os.path.dirname(checkpoint_path), name)
+
+
 def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
                 accumulation_steps=16, max_grad_norm=0.5, use_curriculum=False,
                 checkpoint_path='best_model.pt', checkpoint_freq=5, optimizer_type='adamw'):
@@ -344,14 +362,14 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
             # Save checkpoint at regular intervals
             if (epoch + 1) % checkpoint_freq == 0:
                 save_checkpoint(
-                    f'checkpoint_epoch_{epoch+1}.pt', epoch, model, optimizer, scheduler,
+                    sibling_checkpoint(checkpoint_path, f'checkpoint_epoch_{epoch+1}.pt'), epoch, model, optimizer, scheduler,
                     scaler, avg_val_loss, train_losses, val_losses, training_config
                 )
 
     except KeyboardInterrupt:
         print("Training interrupted by user. Saving checkpoint...")
         save_checkpoint(
-            'interrupted_checkpoint.pt', epoch, model, optimizer, scheduler, scaler,
+            sibling_checkpoint(checkpoint_path, 'interrupted_checkpoint.pt'), epoch, model, optimizer, scheduler, scaler,
             avg_val_loss, train_losses, val_losses, training_config
         )
 
@@ -361,7 +379,7 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
         print("Training failed. Saving a recovery checkpoint before re-raising...")
         try:
             save_checkpoint(
-                'failed_checkpoint.pt', epoch, model, optimizer, scheduler, scaler,
+                sibling_checkpoint(checkpoint_path, 'failed_checkpoint.pt'), epoch, model, optimizer, scheduler, scaler,
                 avg_val_loss, train_losses, val_losses, training_config
             )
         except Exception as save_error:
