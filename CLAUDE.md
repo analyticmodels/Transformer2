@@ -9,8 +9,8 @@ This machine has more than one Python 3.14 sharing `~/.local/lib/python3.14/site
 so imports outside the venv resolve inconsistently (`torch` imports under one and fails
 under another).
 
-- Install runtime deps: `.venv/bin/pip install -r requirements.txt`
-- Install test deps too: `.venv/bin/pip install -r requirements-dev.txt`
+- Install the package: `.venv/bin/pip install -e .`
+- With the test suite: `.venv/bin/pip install -e ".[dev]"`
 
 ## Build/Run Commands
 
@@ -51,7 +51,7 @@ These encode past bugs; the test suite guards each one.
   must omit missing values rather than record `None` (a present-but-`None` entry defeats
   the reader's fallbacks).
 - **`generate_text()` returns the continuation only.** Callers prepend the prompt
-  themselves; including it double-prints and skews `optimize_inference` metrics.
+  themselves; including it double-prints and skews `inference/tuning.py` metrics.
 - **The repetition penalty must be sign-aware.** Most logits are negative, and dividing a
   negative logit boosts the token it is meant to suppress.
 - **Load failures must raise.** Substituting a freshly initialised model makes callers
@@ -75,7 +75,7 @@ These encode past bugs; the test suite guards each one.
   Training reads `data/reddit_text.parquet` when present and warns when it does not.
 - **Token counts are not additive across concatenation.** The separator costs tokens
   and BPE merges across the join, so packed chunks must be re-measured, not summed.
-- **Ollama is inference-only** — no parameters, no gradients. `training.py --use_ollama`
+- **Ollama is inference-only** — no parameters, no gradients. `t2-train --use_ollama`
   must keep failing loudly.
 
 ## Credentials

@@ -220,7 +220,7 @@ count will not load until you supply one:
 t2-generate --model_path checkpoints/checkpoint_epoch_5.pt --num_heads 8 --prompt "..."
 ```
 
-Checkpoints written by the current `training.py` record it and need no flag.
+Checkpoints written by the current `t2-train` record it and need no flag.
 `t2-tune` accepts `--num_heads` too.
 
 ### Tuning Generation Parameters
@@ -243,7 +243,7 @@ t2-generate --use_ollama --ollama_model llama2 --prompt "Once upon a time"
 ```
 
 This is an inference backend only. An Ollama model is served over HTTP and exposes
-no trainable parameters or gradients, so `training.py --use_ollama` exits with an
+no trainable parameters or gradients, so `t2-train --use_ollama` exits with an
 error rather than appearing to train.
 
 ### End-to-end Demo
