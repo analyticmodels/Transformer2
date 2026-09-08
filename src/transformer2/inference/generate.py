@@ -1,6 +1,6 @@
 import torch
 from transformer2.model.transformer import SmallTransformer
-from transformer2.paths import tokenizer_dir
+from transformer2.paths import checkpoint_dir, tokenizer_dir
 from transformer2.tokenization.bpe import create_tokenizer, read_tokenizer_meta
 
 # ollama_integration is imported lazily inside the use_ollama branches so that the
@@ -113,7 +113,7 @@ def infer_architecture(state_dict, config=None, num_heads_override=None):
         'max_seq_len': max_seq_len,
     }
 
-def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_type="bluesky",
+def load_model(model_path=None, model=None, tokenizer=None, dataset_type="bluesky",
                use_ollama=False, ollama_model="llama2", num_heads=None):
     """
     Load a transformer model from checkpoint.
@@ -133,6 +133,7 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
     Raises:
         RuntimeError: If the checkpoint cannot be read or its weights do not fit the model.
     """
+    model_path = str(model_path or checkpoint_dir() / "best_model.pt")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # For Ollama models, create the model and tokenizer directly
@@ -377,7 +378,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
         print(f"Error decoding generated tokens: {e}")
         return ""
 
-def run_interactive_demo(model_path='best_model.pt', dataset_type="bluesky", use_ollama=False,
+def run_interactive_demo(model_path=None, dataset_type="bluesky", use_ollama=False,
                          ollama_model="llama2", num_heads=None):
     """
     Run an interactive demo for text generation.
@@ -434,8 +435,8 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Text generation with transformer models')
-    parser.add_argument('--model_path', type=str, default='best_model.pt',
-                        help='Path to the model checkpoint (not used with --use_ollama)')
+    parser.add_argument('--model_path', type=str, default=None,
+                        help='Model checkpoint (default: <checkpoints>/best_model.pt)')
     parser.add_argument('--dataset_type', type=str, default='bluesky',
                         help='Type of dataset the model was trained on (bluesky, reddit, imdb)')
     parser.add_argument('--use_ollama', action='store_true',

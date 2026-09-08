@@ -247,8 +247,8 @@ def main():
                         help='Prompt to use for testing (default: "The future of AI is")')
     parser.add_argument('--reference', type=str, default=None,
                         help='Reference text to compare generation against (for BLEU score)')
-    parser.add_argument('--model_path', type=str, default='best_model.pt',
-                        help='Path to the model checkpoint')
+    parser.add_argument('--model_path', type=str, default=None,
+                        help='Model checkpoint (default: <checkpoints>/best_model.pt)')
     parser.add_argument('--dataset_type', type=str, default='bluesky',
                         help='Type of dataset the model was trained on')
     parser.add_argument('--metric', type=str, default='combined', choices=['combined', 'ppl', 'diversity', 'length', 'bleu'],

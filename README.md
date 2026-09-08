@@ -109,6 +109,7 @@ The `t2-*` commands are installed into the virtual environment. Prefix them with
 ```bash
 # TinyStories: ~2.1M synthetic short stories (~250M tokens)
 t2-collect --dataset tinystories
+t2-tokenizer --dataset_type tinystories     # each corpus needs its own tokenizer
 t2-postprocess tinystories --max_tokens 320
 
 # Collect Bluesky data
@@ -164,6 +165,9 @@ the checkpoint, and inference refuses a checkpoint whose tokenizer no longer mat
 ```bash
 t2-tokenizer --dataset_type bluesky --vocab_size 50000
 ```
+
+A corpus without its own tokenizer is an error, not a silent fallback: building
+one is a required step before training or postprocessing a new corpus.
 
 Training and inference both create it on demand if it is missing, but doing it
 explicitly is faster and makes the vocabulary size a deliberate choice. The

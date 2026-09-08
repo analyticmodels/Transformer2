@@ -416,8 +416,8 @@ def main():
                         help='Optimizer to use (default: adamw)')
     parser.add_argument('--use_curriculum', action='store_true',
                         help='Use curriculum learning (gradually increase sequence length)')
-    parser.add_argument('--output_dir', type=str, default='.',
-                        help='Directory to save model checkpoints')
+    parser.add_argument('--output_dir', type=str, default=None,
+                        help='Directory for checkpoints (default: <checkpoints>/)')
     parser.add_argument('--use_ollama', action='store_true',
                         help='Not supported for training; use inference.py --use_ollama instead')
     # Model training parameters
@@ -443,6 +443,7 @@ def main():
             "instead: t2-generate --use_ollama --ollama_model <name>"
         )
 
+    args.output_dir = str(args.output_dir or checkpoint_dir())
     os.makedirs(args.output_dir, exist_ok=True)
 
     print(f"Training on {args.dataset} dataset")
@@ -452,7 +453,7 @@ def main():
 
     # Import here to avoid circular imports
     from transformer2.data.loaders import get_dataloaders
-    from transformer2.paths import tokenizer_dir
+    from transformer2.paths import checkpoint_dir, tokenizer_dir
     from transformer2.tokenization.bpe import read_tokenizer_meta
 
     # Load data
