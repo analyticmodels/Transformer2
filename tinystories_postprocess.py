@@ -84,7 +84,7 @@ def postprocess_tinystories(input_path=None, output_path=None,
         )
 
     if tokenizer is None:
-        tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="tinystories")
+        tokenizer = create_tokenizer("tinystories")
 
     def lengths_fn(texts):
         texts = list(texts)

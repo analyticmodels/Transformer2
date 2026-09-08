@@ -1,11 +1,64 @@
+import pathlib
 from tokenizers import ByteLevelBPETokenizer
 from transformers import PreTrainedTokenizerFast, GPT2Tokenizer
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 import torch
+import hashlib
+import json
 import os
 from abc import ABC, abstractmethod
+
+from paths import ensure, tokenizer_dir
 # from  dataloader import get_reddit_dataloaders, get_bluesky_dataloaders
+
+
+SPECIAL_TOKENS = ["<s>", "</s>", "<pad>", "<unk>"]
+META_NAME = "meta.json"
+
+
+def vocab_fingerprint(directory):
+    """
+    Hash a tokenizer's vocabulary.
+
+    Every tokenizer this project trains has exactly 50000 entries, so vocabulary
+    size cannot distinguish a Bluesky tokenizer from a Reddit one. The fingerprint
+    is what lets a checkpoint prove it is being loaded with the tokenizer it was
+    trained on.
+
+    Args:
+        directory (str or pathlib.Path): Directory holding vocab.json
+
+    Returns:
+        str: Hex sha256 of vocab.json
+    """
+    return hashlib.sha256((pathlib.Path(directory) / "vocab.json").read_bytes()).hexdigest()
+
+
+def write_tokenizer_meta(directory, dataset_type, vocab_size, min_frequency, source=None):
+    """Record which corpus a tokenizer came from, beside the tokenizer itself."""
+    directory = pathlib.Path(directory)
+    meta = {
+        "dataset": dataset_type,
+        "vocab_size": vocab_size,
+        "min_frequency": min_frequency,
+        "source": str(source) if source else None,
+        "vocab_sha256": vocab_fingerprint(directory),
+    }
+    (directory / META_NAME).write_text(json.dumps(meta, indent=2) + "\n")
+    return meta
+
+
+def read_tokenizer_meta(directory):
+    """Read a tokenizer's provenance, or None if it predates provenance tracking."""
+    path = pathlib.Path(directory) / META_NAME
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
 
 class BaseTokenizerWrapper(ABC):
     @abstractmethod
@@ -150,9 +203,9 @@ def train_byte_level_tokenizer(dataset_type, vocab_size=50000, min_frequency=2):
     """
     import pandas as pd
     
-    # Create the output directory
-    os.makedirs("tokenizer", exist_ok=True)
-    training_data_path = "tokenizer/training_data.txt"
+    # The corpus dump lives beside the tokenizer it produces
+    destination = ensure(tokenizer_dir(dataset_type))
+    training_data_path = str(destination / "training_data.txt")
     
     # Load the dataset based on the dataset_type
     if dataset_type == "bluesky":
@@ -273,65 +326,106 @@ def train_byte_level_tokenizer(dataset_type, vocab_size=50000, min_frequency=2):
         special_tokens=["<s>", "</s>", "<pad>", "<unk>"]
     )
 
-    # Save the tokenizer files for future use
-    tokenizer.save_model("tokenizer")
+    # Save the tokenizer files for future use, beside a record of which corpus
+    # they came from -- vocabulary size alone cannot identify a tokenizer.
+    destination = ensure(tokenizer_dir(dataset_type))
+    tokenizer.save_model(str(destination))
+    write_tokenizer_meta(destination, dataset_type, vocab_size, min_frequency,
+                         source=training_data_path)
+    print(f"Saved the {dataset_type} tokenizer to {destination}")
     return tokenizer
 
-def create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="wikitext", **kwargs):
+def create_tokenizer(dataset_type, tokenizer_type="byte-level-bpe", *,
+                     directory=None, **kwargs):
     """
-    Factory function to create and wrap tokenizers.
+    Load the tokenizer belonging to a corpus.
+
+    `dataset_type` is a required positional argument. It used to default to
+    "wikitext" and be ignored for path resolution, so five of six call sites never
+    passed it and every corpus silently shared one vocabulary.
 
     Args:
-        tokenizer_type (str): The type of tokenizer to create ("byte-level-bpe" or "gpt2").
-        dataset_type (str): The dataset type to use for training the tokenizer (if applicable).
+        dataset_type (str): Corpus the tokenizer was built from
+        tokenizer_type (str): "byte-level-bpe" (default) or "gpt2"
+        directory (str or pathlib.Path, optional): Override the resolved location
+        **kwargs: Ignored; accepted so existing callers keep working
 
     Returns:
-        BaseTokenizerWrapper: A wrapped tokenizer instance.
+        BaseTokenizerWrapper: The wrapped tokenizer
+
+    Raises:
+        FileNotFoundError: If no tokenizer exists for this corpus. Falling back to
+            GPT-2 here would silently swap in a 50257-token vocabulary and train or
+            generate against the wrong one.
+        ValueError: If tokenizer_type is unknown
     """
-    # Check if we have pre-trained GPT2 tokenizer files
     if tokenizer_type == "gpt2":
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        return HuggingFaceTokenizerWrapper(tokenizer)
-    
-    # For byte-level BPE tokenizer
-    elif tokenizer_type == "byte-level-bpe":
-        # Check for existing tokenizer files
-        if os.path.exists("tokenizer/vocab.json") and os.path.exists("tokenizer/merges.txt"):
-            try:
-                # Try to load the existing tokenizer
-                tokenizer = ByteLevelBPETokenizer.from_file(
-                    "tokenizer/vocab.json",
-                    "tokenizer/merges.txt"
-                )
-                print("Using existing tokenizer files.")
-                return ByteLevelBPETokenizerWrapper(tokenizer)
-            except Exception as e:
-                print(f"Error loading existing tokenizer: {e}")
-                print("Will create a new tokenizer.")
-        
-        # If no tokenizer files or loading failed, check for pre-existing training data
-        if os.path.exists("tokenizer/training_data.txt"):
-            print("Using existing training data file for tokenizer training.")
-            # Initialize and train tokenizer
-            tokenizer = ByteLevelBPETokenizer()
-            tokenizer.train(
-                files=["tokenizer/training_data.txt"],
-                vocab_size=kwargs.get('vocab_size', 50000),
-                min_frequency=kwargs.get('min_frequency', 2),
-                special_tokens=["<s>", "</s>", "<pad>", "<unk>"]
-            )
-            tokenizer.save_model("tokenizer")
-            return ByteLevelBPETokenizerWrapper(tokenizer)
-        
-        # If no training data, we'd have to generate it
-        print("No existing tokenizer or training data found.")
-        print("For faster tokenizer initialization, please run 'python tokenizer.py' first.")
-        print("Using GPT2 tokenizer as fallback.")
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        return HuggingFaceTokenizerWrapper(tokenizer)
-    
-    else:
+        return HuggingFaceTokenizerWrapper(GPT2Tokenizer.from_pretrained('gpt2'))
+
+    if tokenizer_type != "byte-level-bpe":
         raise ValueError(f"Unknown tokenizer type: {tokenizer_type}")
+
+    directory = pathlib.Path(directory) if directory else tokenizer_dir(dataset_type)
+    vocab, merges = directory / "vocab.json", directory / "merges.txt"
+
+    if not (vocab.is_file() and merges.is_file()):
+        raise FileNotFoundError(
+            f"No tokenizer for '{dataset_type}' at {directory}. Build one with:\n"
+            f"    python tokenizer.py --dataset_type {dataset_type}"
+        )
+
+    tokenizer = ByteLevelBPETokenizer.from_file(str(vocab), str(merges))
+    meta = read_tokenizer_meta(directory)
+    if meta is None:
+        print(f"Using tokenizer at {directory} (no provenance recorded).")
+    else:
+        print(f"Using the '{meta['dataset']}' tokenizer at {directory}.")
+    return ByteLevelBPETokenizerWrapper(tokenizer)
+
+
+
+def load_or_build_tokenizer(dataset_type, texts=None, vocab_size=50000, min_frequency=2):
+    """
+    Return the tokenizer for a corpus, training one if it does not exist yet.
+
+    This is the single producer of tokenizers. dataloader.py previously carried its
+    own inline training code that wrote the same directory with different settings
+    and no provenance record, so two producers disagreed about what the files meant.
+
+    Args:
+        dataset_type (str): Corpus name
+        texts (list of str, optional): Corpus text, used when one has to be trained.
+            Falls back to rebuilding from the dataset on disk when omitted.
+        vocab_size (int): Vocabulary size when training
+        min_frequency (int): Minimum token frequency when training
+
+    Returns:
+        BaseTokenizerWrapper
+    """
+    directory = tokenizer_dir(dataset_type)
+    if (directory / "vocab.json").is_file() and (directory / "merges.txt").is_file():
+        return create_tokenizer(dataset_type)
+
+    print(f"No tokenizer for '{dataset_type}' yet; training one...")
+    if texts is None:
+        train_byte_level_tokenizer(dataset_type, vocab_size=vocab_size,
+                                   min_frequency=min_frequency)
+        return create_tokenizer(dataset_type)
+
+    raw = ByteLevelBPETokenizer()
+    raw.train_from_iterator(
+        (texts[i:i + 1000] for i in range(0, len(texts), 1000)),
+        vocab_size=vocab_size,
+        min_frequency=min_frequency,
+        special_tokens=SPECIAL_TOKENS,
+    )
+    destination = ensure(directory)
+    raw.save_model(str(destination))
+    write_tokenizer_meta(destination, dataset_type, vocab_size, min_frequency,
+                         source=f"{dataset_type} dataloader corpus")
+    print(f"Saved the {dataset_type} tokenizer to {destination}")
+    return create_tokenizer(dataset_type)
+
 
 def main():
     """Build (or reuse) the byte-level BPE tokenizer for a dataset."""
@@ -356,7 +450,8 @@ def main():
     # for tokenizer/training_data.txt, which exists as soon as ANY corpus has been
     # processed -- so --dataset_type was silently ignored and the cached vocabulary
     # from a different corpus was loaded instead.
-    cached = os.path.exists("tokenizer/vocab.json") and os.path.exists("tokenizer/merges.txt")
+    directory = tokenizer_dir(args.dataset_type)
+    cached = (directory / "vocab.json").is_file() and (directory / "merges.txt").is_file()
     if args.force or not cached:
         print(f"Building tokenizer from the {args.dataset_type} corpus...")
         train_byte_level_tokenizer(
@@ -365,16 +460,10 @@ def main():
             min_frequency=args.min_frequency,
         )
     else:
-        print("Reusing the cached tokenizer in tokenizer/.")
-        print("  WARNING: the cached tokenizer records no corpus, so it may not be the")
-        print(f"  one for --dataset_type {args.dataset_type}. Pass --force to rebuild.")
+        print(f"Reusing the cached {args.dataset_type} tokenizer at {directory}.")
+        print("  Pass --force to rebuild it.")
 
-    tokenizer = create_tokenizer(
-        tokenizer_type="byte-level-bpe",
-        dataset_type=args.dataset_type,
-        vocab_size=args.vocab_size,
-        min_frequency=args.min_frequency,
-    )
+    tokenizer = create_tokenizer(args.dataset_type)
 
     encoded = tokenizer.encode("Hello, how are you?")
     print(f"Tokenizer test - Encoded: {encoded}")

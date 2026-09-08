@@ -247,7 +247,7 @@ class TestBudgetWithRealTokenizer:
     @pytest.fixture(scope='class')
     def tokenizer(self):
         from tokenizer import create_tokenizer
-        return create_tokenizer("byte-level-bpe")
+        return create_tokenizer("bluesky")
 
     @pytest.fixture(scope='class')
     def lengths_fn(self, tokenizer):

@@ -4,10 +4,9 @@ from transformers import PreTrainedTokenizerFast, GPT2Tokenizer
 import numpy as np
 import os
 import pandas as pd
-from tokenizers import ByteLevelBPETokenizer
 from tqdm import tqdm
 
-from tokenizer import create_tokenizer
+from tokenizer import load_or_build_tokenizer
 from paths import data_dir
 
 def build_labels(input_ids, length, max_length):
@@ -192,37 +191,8 @@ def get_reddit_dataloaders(parquet_path=None, batch_size=32, max_length=512,
     """
     texts = load_reddit_texts(parquet_path)
 
-    # Create or load tokenizer
-    if os.path.exists("tokenizer/vocab.json"):
-        print("Loading existing tokenizer")
-        print("  NOTE: the cached tokenizer in tokenizer/ is reused as-is. If it was")
-        print("  trained on a different corpus it will compress Reddit prose poorly.")
-        print("  Delete tokenizer/ or run: python tokenizer.py --dataset_type reddit")
-        tokenizer = create_tokenizer(tokenizer_type)
-    else:
-        print("Training new tokenizer on Reddit data")
-        # Initialize tokenizer
-        raw_tokenizer = ByteLevelBPETokenizer()
-        
-        # Create vocabulary from Reddit data
-        def batch_iterator():
-            for i in range(0, len(texts), 1000):
-                yield texts[i:i + 1000]
-        
-        # Train tokenizer on Reddit data
-        raw_tokenizer.train_from_iterator(
-            batch_iterator(),
-            vocab_size=50000,
-            min_frequency=2,
-            special_tokens=["<s>", "</s>", "<pad>", "<unk>"]
-        )
-        
-        # Save tokenizer
-        os.makedirs("tokenizer", exist_ok=True)
-        raw_tokenizer.save_model("tokenizer")
-        
-        # Create wrapped tokenizer
-        tokenizer = create_tokenizer(tokenizer_type)
+    # One producer of tokenizers, with provenance recorded beside the files
+    tokenizer = load_or_build_tokenizer('reddit', texts)
     
     # Split data into train and validation sets
     num_val = int(len(texts) * val_split)
@@ -283,34 +253,8 @@ def get_bluesky_dataloaders(parquet_path=None, batch_size=32, max_length=512,
     texts = df['text'].tolist()
     print(f"Loaded {len(texts)} Bluesky posts")
     
-    # Create or load tokenizer
-    if os.path.exists("tokenizer/vocab.json"):
-        print("Loading existing tokenizer")
-        tokenizer = create_tokenizer(tokenizer_type)
-    else:
-        print("Training new tokenizer on Bluesky data")
-        # Initialize tokenizer
-        raw_tokenizer = ByteLevelBPETokenizer()
-        
-        # Create vocabulary from Bluesky data
-        def batch_iterator():
-            for i in range(0, len(texts), 1000):
-                yield texts[i:i + 1000]
-        
-        # Train tokenizer on Bluesky data
-        raw_tokenizer.train_from_iterator(
-            batch_iterator(),
-            vocab_size=50000,
-            min_frequency=2,
-            special_tokens=["<s>", "</s>", "<pad>", "<unk>"]
-        )
-        
-        # Save tokenizer
-        os.makedirs("tokenizer", exist_ok=True)
-        raw_tokenizer.save_model("tokenizer")
-        
-        # Create wrapped tokenizer
-        tokenizer = create_tokenizer(tokenizer_type)
+    # One producer of tokenizers, with provenance recorded beside the files
+    tokenizer = load_or_build_tokenizer('bluesky', texts)
     
     # Split data into train and validation sets
     num_val = int(len(texts) * val_split)
@@ -389,16 +333,7 @@ def get_tinystories_dataloaders(parquet_path=None, batch_size=32, max_length=320
     texts = pd.read_parquet(parquet_path)['text'].tolist()
     print(f"Loaded {len(texts):,} stories")
 
-    if os.path.exists("tokenizer/vocab.json"):
-        print("Loading existing tokenizer")
-        print("  NOTE: the cached tokenizer in tokenizer/ is reused as-is. Rebuild it")
-        print("  for this corpus with: python tokenizer.py --dataset_type tinystories")
-        tokenizer = create_tokenizer(tokenizer_type)
-    else:
-        raise FileNotFoundError(
-            "No tokenizer found. Build one first:\n"
-            "    python tokenizer.py --dataset_type tinystories"
-        )
+    tokenizer = load_or_build_tokenizer('tinystories', texts)
 
     # Shuffle before splitting: an ordered corpus otherwise puts a systematically
     # different slice in validation than in training.

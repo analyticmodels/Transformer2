@@ -1,6 +1,7 @@
 import torch
 from coreTransformer import SmallTransformer
-from tokenizer import create_tokenizer
+from paths import tokenizer_dir
+from tokenizer import create_tokenizer, read_tokenizer_meta
 
 # ollama_integration is imported lazily inside the use_ollama branches so that the
 # local inference path does not depend on it (or on `requests`) at all.
@@ -145,7 +146,7 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
 
     # Create tokenizer if not provided
     if tokenizer is None:
-        tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type=dataset_type)
+        tokenizer = create_tokenizer(dataset_type)
     
     # For local models, load the checkpoint to get model config
     try:
@@ -165,6 +166,21 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
             config=checkpoint.get('config'),
             num_heads_override=num_heads
         )
+
+        # A matching vocabulary size proves nothing: every corpus in this project
+        # trains to 50000 tokens, so a Reddit tokenizer loads a Bluesky checkpoint
+        # without complaint and generates noise. Compare the recorded fingerprint.
+        recorded = (checkpoint.get('config') or {}).get('tokenizer_vocab_sha256')
+        if recorded:
+            actual_dir = tokenizer_dir(dataset_type)
+            actual = read_tokenizer_meta(actual_dir) or {}
+            if actual.get('vocab_sha256') and actual['vocab_sha256'] != recorded:
+                raise RuntimeError(
+                    f"Checkpoint {model_path} was trained with the "
+                    f"'{(checkpoint.get('config') or {}).get('tokenizer_dataset')}' tokenizer, "
+                    f"but {actual_dir} holds the '{actual.get('dataset')}' one. "
+                    f"Pass --dataset_type for the corpus this model was trained on."
+                )
 
         # The tokenizer has to agree with the embedding table. create_tokenizer silently
         # falls back to GPT-2 (50257 tokens) when tokenizer/vocab.json is missing, which

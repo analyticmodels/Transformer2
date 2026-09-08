@@ -137,7 +137,7 @@ def postprocess_reddit_data(input_path=None, output_path=None,
         )
 
     if tokenizer is None:
-        tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type="reddit")
+        tokenizer = create_tokenizer("reddit")
 
     def lengths_fn(texts):
         texts = list(texts)

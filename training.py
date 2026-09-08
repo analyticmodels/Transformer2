@@ -124,7 +124,8 @@ def sibling_checkpoint(checkpoint_path, name):
 
 def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
                 accumulation_steps=16, max_grad_norm=0.5, use_curriculum=False,
-                checkpoint_path='best_model.pt', checkpoint_freq=5, optimizer_type='adamw'):
+                checkpoint_path='best_model.pt', checkpoint_freq=5, optimizer_type='adamw',
+                tokenizer_meta=None):
     """
     Train a transformer model with optional curriculum learning.
 
@@ -139,6 +140,7 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
         use_curriculum: Whether to use curriculum learning (gradually increase sequence length)
         checkpoint_path: Path to save the best model
         checkpoint_freq: Frequency (in epochs) to save checkpoints
+        tokenizer_meta: Provenance of the tokenizer, recorded in the checkpoint
         optimizer_type: One of 'adam', 'adamw' or 'sgd'
 
     Returns:
@@ -240,6 +242,13 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
         'use_curriculum': use_curriculum,
         'optimizer_type': optimizer_type,
     }
+    if tokenizer_meta:
+        # Vocabulary size cannot identify a tokenizer -- every corpus here trains to
+        # 50000 -- so the checkpoint records which one it was actually trained with.
+        training_config.update({
+            'tokenizer_dataset': tokenizer_meta.get('dataset'),
+            'tokenizer_vocab_sha256': tokenizer_meta.get('vocab_sha256'),
+        })
 
     print(f"Starting training on {device} with {'curriculum' if use_curriculum else 'standard'} learning")
     print(f"Number of batches: {len(train_loader)}")
@@ -443,6 +452,8 @@ def main():
 
     # Import here to avoid circular imports
     from dataloader import get_dataloaders
+    from paths import tokenizer_dir
+    from tokenizer import read_tokenizer_meta
 
     # Load data
     train_loader, val_loader, tokenizer = get_dataloaders(
@@ -474,7 +485,8 @@ def main():
         accumulation_steps=args.accumulation_steps,
         use_curriculum=args.use_curriculum,
         checkpoint_path=checkpoint_path,
-        optimizer_type=args.optimizer
+        optimizer_type=args.optimizer,
+        tokenizer_meta=read_tokenizer_meta(tokenizer_dir(args.dataset)),
     )
 
     print(f"\nTraining completed. Best model saved to {checkpoint_path}")

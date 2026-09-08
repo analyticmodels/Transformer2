@@ -1,0 +1,7 @@
+{
+  "dataset": "bluesky",
+  "vocab_size": 50000,
+  "min_frequency": 2,
+  "source": "data/bluesky_posts.parquet",
+  "vocab_sha256": "604bb5786731fea57d5195aedeea257985f807da626d7e7b17a6bcc1d8acbc2d"
+}
