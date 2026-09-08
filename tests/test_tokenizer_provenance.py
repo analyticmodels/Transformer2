@@ -13,10 +13,10 @@ import hashlib
 import pytest
 import torch
 
-import inference
-import paths
-from coreTransformer import SmallTransformer
-from tokenizer import (
+import transformer2.inference.generate as inference
+import transformer2.paths as paths
+from transformer2.model.transformer import SmallTransformer
+from transformer2.tokenization.bpe import (
     create_tokenizer,
     read_tokenizer_meta,
     vocab_fingerprint,

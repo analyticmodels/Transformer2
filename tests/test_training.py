@@ -15,11 +15,11 @@ import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-import training
+import transformer2.training.trainer as training
 from conftest import requires_cuda
-from coreTransformer import SmallTransformer
-from inference import infer_architecture
-from training import (
+from transformer2.model.transformer import SmallTransformer
+from transformer2.inference.generate import infer_architecture
+from transformer2.training.trainer import (
     get_curriculum_length,
     model_config,
     save_checkpoint,
@@ -230,7 +230,7 @@ class TestCommandLine:
             def get_vocab_size(self): return 100
 
         loaders = (MagicMock(), MagicMock(), FakeTokenizer())
-        with patch('dataloader.get_dataloaders', return_value=loaders), \
+        with patch('transformer2.data.loaders.get_dataloaders', return_value=loaders), \
              patch.object(training, 'train_model', side_effect=fake_train_model), \
              patch.object(sys, 'argv', ['training.py', f'--output_dir={tmp_path}'] + argv):
             training.main()
@@ -311,3 +311,19 @@ class TestSiblingCheckpoint:
         for literal in ("'interrupted_checkpoint.pt'", "'failed_checkpoint.pt'"):
             assert f"sibling_checkpoint(checkpoint_path, {literal})" in source
         assert "sibling_checkpoint(checkpoint_path, f'checkpoint_epoch_" in source
+
+
+class TestDeferredImports:
+    """
+    trainer.main() resolves get_dataloaders at call time, not import time. The
+    CLI test patches it before calling main(), so hoisting the import to module
+    scope would silently run the real loader against an 800 MB parquet.
+    """
+
+    def test_get_dataloaders_is_not_bound_at_module_scope(self):
+        assert 'get_dataloaders' not in vars(training)
+
+    def test_module_import_does_not_pull_in_the_data_stack(self):
+        source = inspect.getsource(training.main)
+
+        assert 'from transformer2.data.loaders import get_dataloaders' in source

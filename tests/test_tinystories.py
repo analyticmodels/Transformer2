@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from tinystories_postprocess import clean_story, postprocess_tinystories
+from transformer2.data.tinystories import clean_story, postprocess_tinystories
 
 
 class WordTokenizer:
@@ -123,7 +123,7 @@ class TestPostprocess:
 
 class TestCollector:
     def test_writes_text_column_and_respects_max_samples(self, tmp_path):
-        from data_collection import collect_tinystories
+        from transformer2.data.collection import collect_tinystories
 
         fake = [{'text': f'story {i}'} for i in range(10)]
 
@@ -134,7 +134,7 @@ class TestCollector:
             def __getitem__(self, key): return [r[key] for r in self.rows]
 
         out = tmp_path / 'tinystories.parquet'
-        with patch('data_collection.load_dataset', return_value=FakeDataset(fake)):
+        with patch('transformer2.data.collection.load_dataset', return_value=FakeDataset(fake)):
             df = collect_tinystories(str(out), max_samples=4)
 
         assert list(df.columns) == ['text']
@@ -142,13 +142,13 @@ class TestCollector:
         assert pd.read_parquet(out)['text'].iloc[0] == 'story 0'
 
     def test_requests_the_named_split(self, tmp_path):
-        from data_collection import collect_tinystories
+        from transformer2.data.collection import collect_tinystories
 
         class FakeDataset:
             def __len__(self): return 1
             def __getitem__(self, key): return ['a story']
 
-        with patch('data_collection.load_dataset', return_value=FakeDataset()) as loader:
+        with patch('transformer2.data.collection.load_dataset', return_value=FakeDataset()) as loader:
             collect_tinystories(str(tmp_path / 'x.parquet'), split='validation')
 
         assert loader.call_args.kwargs['split'] == 'validation'

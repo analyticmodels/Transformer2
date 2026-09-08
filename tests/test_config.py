@@ -7,8 +7,8 @@ explicitly via monkeypatch.
 
 import pytest
 
-import config
-from config import MissingCredentialError, get_secret, huggingface_token, reddit_credentials
+import transformer2.config as config
+from transformer2.config import MissingCredentialError, get_secret, huggingface_token, reddit_credentials
 
 
 class TestGetSecret:

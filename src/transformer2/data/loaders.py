@@ -6,8 +6,8 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
-from tokenizer import load_or_build_tokenizer
-from paths import data_dir
+from transformer2.tokenization.bpe import load_or_build_tokenizer
+from transformer2.paths import data_dir
 
 def build_labels(input_ids, length, max_length):
     """

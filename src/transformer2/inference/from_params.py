@@ -12,9 +12,9 @@ Usage:
 import argparse
 import json
 import torch
-from inference import load_model, generate_text
+from transformer2.inference.generate import load_model, generate_text
 import os
-from paths import output_dir
+from transformer2.paths import output_dir
 
 def main():
     parser = argparse.ArgumentParser(description='Generate text using optimized parameters')

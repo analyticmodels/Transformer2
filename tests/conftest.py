@@ -11,7 +11,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from coreTransformer import SmallTransformer
+from transformer2.model.transformer import SmallTransformer
 
 # Special token ids match tokenizer.py's ByteLevelBPETokenizerWrapper training order:
 # ["<s>", "</s>", "<pad>", "<unk>"] -> 0, 1, 2, 3

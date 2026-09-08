@@ -5,8 +5,8 @@ from tqdm import tqdm
 import time
 from datasets import load_dataset
 
-from config import reddit_credentials
-from paths import data_dir
+from transformer2.config import reddit_credentials
+from transformer2.paths import data_dir
 
 # Corpus filenames; the directory they live in comes from paths.data_dir().
 BLUESKY_NAME = "bluesky_posts.parquet"

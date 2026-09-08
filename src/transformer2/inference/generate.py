@@ -1,7 +1,7 @@
 import torch
-from coreTransformer import SmallTransformer
-from paths import tokenizer_dir
-from tokenizer import create_tokenizer, read_tokenizer_meta
+from transformer2.model.transformer import SmallTransformer
+from transformer2.paths import tokenizer_dir
+from transformer2.tokenization.bpe import create_tokenizer, read_tokenizer_meta
 
 # ollama_integration is imported lazily inside the use_ollama branches so that the
 # local inference path does not depend on it (or on `requests`) at all.
@@ -137,7 +137,7 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
     
     # For Ollama models, create the model and tokenizer directly
     if use_ollama:
-        from ollama_integration import OllamaModel, OllamaTokenizer
+        from transformer2.inference.ollama import OllamaModel, OllamaTokenizer
         if tokenizer is None:
             tokenizer = OllamaTokenizer(ollama_model)
         if model is None:

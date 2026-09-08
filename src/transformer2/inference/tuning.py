@@ -16,8 +16,8 @@ import numpy as np
 from tqdm import tqdm
 import time
 import json
-from inference import load_model, generate_text
-from paths import ensure, output_dir
+from transformer2.inference.generate import load_model, generate_text
+from transformer2.paths import ensure, output_dir
 
 # Optional: only import if available
 try:

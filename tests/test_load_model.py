@@ -9,10 +9,10 @@ raise instead.
 import pytest
 import torch
 
-from coreTransformer import SmallTransformer
+from transformer2.model.transformer import SmallTransformer
 from conftest import StubTokenizer
 
-from inference import load_model
+from transformer2.inference.generate import load_model
 
 
 @pytest.fixture

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from ollama_integration import OllamaModel, OllamaTokenizer
+from transformer2.inference.ollama import OllamaModel, OllamaTokenizer
 
 
 class FakeResponse:
@@ -25,7 +25,7 @@ class FakeResponse:
 
 @pytest.fixture
 def post():
-    with patch('ollama_integration.requests.post') as mocked:
+    with patch('transformer2.inference.ollama.requests.post') as mocked:
         yield mocked
 
 

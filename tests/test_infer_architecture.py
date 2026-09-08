@@ -9,8 +9,8 @@ These tests pin down that the function never invents a head count.
 import pytest
 import torch
 
-from coreTransformer import SmallTransformer
-from inference import infer_architecture
+from transformer2.model.transformer import SmallTransformer
+from transformer2.inference.generate import infer_architecture
 
 
 @pytest.fixture

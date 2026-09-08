@@ -18,8 +18,8 @@ import os
 import sys
 import time
 
-from config import reddit_credentials
-from paths import data_dir
+from transformer2.config import reddit_credentials
+from transformer2.paths import data_dir
 
 def check_data_exists(dataset_type):
     """Check if the data file exists for the specified dataset type."""
@@ -37,7 +37,7 @@ def collect_data(args):
     print("="*80)
     
     # Import the data collection function
-    from data_collection import collect_data
+    from transformer2.data.collection import collect_data
     
     # Collect data based on dataset type
     if args.dataset == 'bluesky':
@@ -84,7 +84,7 @@ def train_model(args):
     print(f"Optimizer: {args.optimizer.upper()}")
     
     # Import the training function
-    from training import train_model, main as training_main
+    from transformer2.training.trainer import train_model, main as training_main
     
     # Set command-line arguments for training
     sys.argv = [

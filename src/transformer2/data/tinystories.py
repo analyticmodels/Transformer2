@@ -21,9 +21,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from text_chunking import chunk_segments
-from tokenizer import create_tokenizer
-from paths import data_dir
+from transformer2.data.chunking import chunk_segments
+from transformer2.tokenization.bpe import create_tokenizer
+from transformer2.paths import data_dir
 
 INPUT_NAME = "tinystories.parquet"
 OUTPUT_NAME = "tinystories_text.parquet"

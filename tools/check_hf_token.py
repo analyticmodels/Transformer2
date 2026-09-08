@@ -11,7 +11,7 @@ import argparse
 
 from transformers import AutoModel
 
-from config import huggingface_token
+from transformer2.config import huggingface_token
 
 
 def main():

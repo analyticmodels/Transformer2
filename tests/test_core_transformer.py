@@ -9,7 +9,7 @@ missing attribute becomes a silently mis-shaped model at load time.
 import pytest
 import torch
 
-from coreTransformer import MultiHeadAttention, SmallTransformer
+from transformer2.model.transformer import MultiHeadAttention, SmallTransformer
 
 
 @pytest.fixture

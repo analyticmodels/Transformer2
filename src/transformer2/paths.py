@@ -57,10 +57,8 @@ def _looks_like_project_root(candidate):
     matching. A working checkout is also recognised by its VCS directory, which is
     what identifies the root before the package layout exists.
     """
-    if (candidate / "pyproject.toml").is_file():
-        if (candidate / "src" / "transformer2").is_dir():
-            return True
-    return (candidate / ".git").is_dir() and (candidate / "paths.py").is_file()
+    return ((candidate / "pyproject.toml").is_file()
+            and (candidate / "src" / "transformer2").is_dir())
 
 
 def _search_upward(start):

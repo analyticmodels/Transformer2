@@ -8,7 +8,7 @@ depends on, and both have been a source of breakage.
 import pytest
 from tokenizers import ByteLevelBPETokenizer
 
-from tokenizer import (
+from transformer2.tokenization.bpe import (
     BaseTokenizerWrapper,
     ByteLevelBPETokenizerWrapper,
     HuggingFaceTokenizerWrapper,

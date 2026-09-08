@@ -9,7 +9,7 @@ import pytest
 import torch
 
 from conftest import EOS_ID, PAD_ID, SPECIAL_IDS, FixedLogitsModel, ScriptedModel, decode_ids
-from inference import generate_text
+from transformer2.inference.generate import generate_text
 
 
 class TestReturnContract:

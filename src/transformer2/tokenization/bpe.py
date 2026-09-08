@@ -9,7 +9,7 @@ import json
 import os
 from abc import ABC, abstractmethod
 
-from paths import ensure, tokenizer_dir
+from transformer2.paths import ensure, tokenizer_dir
 # from  dataloader import get_reddit_dataloaders, get_bluesky_dataloaders
 
 

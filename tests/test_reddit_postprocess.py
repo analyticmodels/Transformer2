@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from reddit_postprocess import (
+from transformer2.data.reddit import (
     enforce_budget,
     chunk_segments,
     clean_text,
@@ -246,7 +246,7 @@ class TestBudgetWithRealTokenizer:
 
     @pytest.fixture(scope='class')
     def tokenizer(self):
-        from tokenizer import create_tokenizer
+        from transformer2.tokenization.bpe import create_tokenizer
         return create_tokenizer("bluesky")
 
     @pytest.fixture(scope='class')

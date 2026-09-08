@@ -451,9 +451,9 @@ def main():
     print(f"Using {args.optimizer} optimizer with {'curriculum' if args.use_curriculum else 'standard'} learning")
 
     # Import here to avoid circular imports
-    from dataloader import get_dataloaders
-    from paths import tokenizer_dir
-    from tokenizer import read_tokenizer_meta
+    from transformer2.data.loaders import get_dataloaders
+    from transformer2.paths import tokenizer_dir
+    from transformer2.tokenization.bpe import read_tokenizer_meta
 
     # Load data
     train_loader, val_loader, tokenizer = get_dataloaders(
@@ -463,7 +463,7 @@ def main():
     )
 
     # Create model
-    from coreTransformer import SmallTransformer
+    from transformer2.model.transformer import SmallTransformer
     model = SmallTransformer(
         vocab_size=tokenizer.get_vocab_size(),
         d_model=args.d_model,

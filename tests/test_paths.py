@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-import paths
+import transformer2.paths as paths
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -41,9 +41,9 @@ class TestProjectRoot:
     def test_resolves_from_a_foreign_cwd_in_a_fresh_interpreter(self, tmp_path):
         """monkeypatch.chdir cannot catch import-time resolution; a subprocess can."""
         result = subprocess.run(
-            [sys.executable, "-c", "import paths; print(paths.data_dir())"],
+            [sys.executable, "-c",
+             "from transformer2.paths import data_dir; print(data_dir())"],
             cwd=tmp_path, capture_output=True, text=True,
-            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
         )
 
         assert result.stdout.strip() == str(REPO_ROOT / "data"), result.stderr
@@ -136,9 +136,8 @@ class TestNoImportSideEffects:
         including into site-packages on a wheel install.
         """
         result = subprocess.run(
-            [sys.executable, "-c", "import paths"],
+            [sys.executable, "-c", "import transformer2.paths"],
             cwd=tmp_path, capture_output=True, text=True,
-            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
         )
 
         assert result.returncode == 0, result.stderr

@@ -26,9 +26,9 @@ import re
 import pandas as pd
 from tqdm import tqdm
 
-from text_chunking import chunk_segments, enforce_budget, split_oversized  # noqa: F401
-from tokenizer import create_tokenizer
-from paths import data_dir
+from transformer2.data.chunking import chunk_segments, enforce_budget, split_oversized  # noqa: F401
+from transformer2.tokenization.bpe import create_tokenizer
+from transformer2.paths import data_dir
 
 INPUT_NAME = "reddit_posts.parquet"
 OUTPUT_NAME = "reddit_text.parquet"
