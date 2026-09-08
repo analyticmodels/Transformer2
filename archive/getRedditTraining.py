@@ -131,8 +131,10 @@ def save_data(df, output_path='data/reddit_posts.parquet'):
 
 def main():
     parser = argparse.ArgumentParser(description='Fetch Reddit posts for LLM training')
-    parser.add_argument('--client_id', default='***REMOVED***', help='Reddit API client ID')
-    parser.add_argument('--client_secret', default='***REMOVED***', help='Reddit API client secret')
+    parser.add_argument('--client_id', default=os.environ.get('REDDIT_CLIENT_ID'),
+                        help='Reddit API client ID (default: REDDIT_CLIENT_ID)')
+    parser.add_argument('--client_secret', default=os.environ.get('REDDIT_CLIENT_SECRET'),
+                        help='Reddit API client secret (default: REDDIT_CLIENT_SECRET)')
     parser.add_argument('--user_agent', default='python:llm-training-data:v1.0 (by /u/analyticmodels)', 
                         help='User agent string for Reddit API')
     parser.add_argument('--subreddits', nargs='+', default=['datascience', 'MachineLearning', 'learnpython', 'Python'],

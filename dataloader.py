@@ -6,56 +6,89 @@ import numpy as np
 import os
 import pandas as pd
 from tokenizers import ByteLevelBPETokenizer
+from tqdm import tqdm
+
 from tokenizer import create_tokenizer
 
+def build_labels(input_ids, length, max_length):
+    """
+    Build next-token targets, ignoring everything that is not real text.
+
+    Position i predicts token i+1. The final real token has nothing to predict, and
+    padding must not be learned at all, so both are set to the -100 index the loss
+    is configured to ignore. Leaving padding in the targets makes the model spend
+    most of its gradient on emitting pad tokens.
+
+    Args:
+        input_ids (torch.Tensor): Token ids of shape [max_length]
+        length (int): Number of real (non-padding) tokens
+        max_length (int): Padded sequence length
+
+    Returns:
+        torch.Tensor: Labels of shape [max_length]
+    """
+    labels = torch.full((max_length,), -100, dtype=torch.long)
+    if length > 1:
+        labels[:length - 1] = input_ids[1:length]
+    return labels
+
+
 class TransformerDataset(Dataset):
-    def __init__(self, texts, tokenizer_wrapper, max_length=512):
+    """
+    Pre-tokenises a corpus into a single contiguous tensor.
+
+    Storing one tensor per example is not merely untidy: DataLoader workers receive
+    the dataset by pickling it, and torch's default `file_descriptor` sharing strategy
+    allocates one shared-memory descriptor per tensor. A corpus of ~1.6M examples
+    therefore exhausts the process descriptor limit before the first batch is served.
+    One [N, max_length] tensor costs a single descriptor instead of N.
+
+    Token ids are held as int32 rather than int64, halving the footprint; they are
+    widened back to long in __getitem__ because nn.Embedding requires it.
+    """
+
+    def __init__(self, texts, tokenizer_wrapper, max_length=512, chunk_size=50000):
         self.tokenizer = tokenizer_wrapper
         self.max_length = max_length
-        self.input_ids = []
-        self.attention_masks = []
-        self.labels = []
-        
-        pad_token_id = self.tokenizer.get_pad_token_id()
-        
-        for text in texts:
-            # Encode text
-            encoding = self.tokenizer.encode(text)
-            
-            # Convert to tensors and handle padding
-            input_ids = torch.tensor(encoding['input_ids'], dtype=torch.long)
-            attention_mask = torch.tensor(encoding['attention_mask'], dtype=torch.long)
-            
-            # Pad or truncate
-            if len(input_ids) > max_length:
-                input_ids = input_ids[:max_length]
-                attention_mask = attention_mask[:max_length]
-            else:
-                padding_length = max_length - len(input_ids)
-                pad_id_tensor = torch.full((padding_length,), pad_token_id, dtype=torch.long)
-                zero_tensor = torch.zeros(padding_length, dtype=torch.long)
-                
-                input_ids = torch.cat([input_ids, pad_id_tensor])
-                attention_mask = torch.cat([attention_mask, zero_tensor])
-            
-            # Create labels
-            labels = input_ids.clone()
-            labels[:-1] = input_ids[1:]
-            labels[-1] = -100
-            
-            # Ensure all tensors are long type
-            self.input_ids.append(input_ids.long())
-            self.attention_masks.append(attention_mask.long())
-            self.labels.append(labels.long())
-    
+        self.pad_token_id = tokenizer_wrapper.get_pad_token_id()
+
+        num_texts = len(texts)
+
+        # Filled as numpy and handed to torch at the end: assigning a Python list into a
+        # numpy row avoids allocating a throwaway tensor per text, which dominates the
+        # loop once the encoding itself is batched.
+        ids_array = np.full((num_texts, max_length), self.pad_token_id, dtype=np.int32)
+        lengths = np.zeros(num_texts, dtype=np.int32)
+
+        # Encode in chunks: the Rust tokenizer parallelises across cores within a batch,
+        # while chunking keeps peak memory bounded and lets progress be reported.
+        with tqdm(total=num_texts, desc="Tokenizing", unit="text") as progress:
+            for start in range(0, num_texts, chunk_size):
+                chunk = texts[start:start + chunk_size]
+                for offset, encoding in enumerate(self.tokenizer.encode_batch(chunk)):
+                    ids = encoding['input_ids'][:max_length]
+                    if ids:
+                        ids_array[start + offset, :len(ids)] = ids
+                    lengths[start + offset] = len(ids)
+                progress.update(len(chunk))
+
+        self.input_ids = torch.from_numpy(ids_array)
+        self.lengths = torch.from_numpy(lengths)
+
     def __len__(self):
-        return len(self.input_ids)
-    
+        return self.input_ids.size(0)
+
     def __getitem__(self, idx):
+        input_ids = self.input_ids[idx].long()
+        length = int(self.lengths[idx])
+
+        attention_mask = torch.zeros(self.max_length, dtype=torch.long)
+        attention_mask[:length] = 1
+
         return {
-            'input_ids': self.input_ids[idx],
-            'attention_mask': self.attention_masks[idx],
-            'labels': self.labels[idx]
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': build_labels(input_ids, length, self.max_length),
         }
 
 class RedditDataset(Dataset):
@@ -69,70 +102,102 @@ class RedditDataset(Dataset):
         return len(self.texts)
     
     def __getitem__(self, idx):
-        text = self.texts[idx]
-        encoding = self.tokenizer.encode(text)
-        
-        # Get token IDs and create attention mask
-        input_ids = torch.tensor(encoding['input_ids'], dtype=torch.long)
-        attention_mask = torch.tensor(encoding['attention_mask'], dtype=torch.long)
-        
-        # Truncate if necessary
-        if len(input_ids) > self.max_length:
-            input_ids = input_ids[:self.max_length]
-            attention_mask = attention_mask[:self.max_length]
-        
-        # Pad if necessary
-        if len(input_ids) < self.max_length:
-            padding_length = self.max_length - len(input_ids)
-            pad_id = self.tokenizer.get_pad_token_id()
-            
-            input_ids = torch.cat([
-                input_ids, 
-                torch.full((padding_length,), pad_id, dtype=torch.long)
-            ])
-            
-            attention_mask = torch.cat([
-                attention_mask, 
-                torch.zeros(padding_length, dtype=torch.long)
-            ])
-        
-        # Create shifted labels for language modeling
-        labels = input_ids.clone()
-        labels[:-1] = input_ids[1:]
-        labels[-1] = -100  # Ignore loss for the last token
-        
+        ids = self.tokenizer.encode(self.texts[idx])['input_ids'][:self.max_length]
+        length = len(ids)
+
+        pad_id = self.tokenizer.get_pad_token_id()
+        input_ids = torch.full((self.max_length,), pad_id, dtype=torch.long)
+        if length:
+            input_ids[:length] = torch.tensor(ids, dtype=torch.long)
+
+        attention_mask = torch.zeros(self.max_length, dtype=torch.long)
+        attention_mask[:length] = 1
+
         return {
             'input_ids': input_ids,
             'attention_mask': attention_mask,
-            'labels': labels
+            'labels': build_labels(input_ids, length, self.max_length),
         }
 
-def get_reddit_dataloaders(parquet_path='data/reddit_posts.parquet', batch_size=32, max_length=512, 
+REDDIT_TEXT_PATH = 'data/reddit_text.parquet'
+REDDIT_RAW_PATH = 'data/reddit_posts.parquet'
+
+
+def load_reddit_texts(parquet_path=None):
+    """
+    Load the Reddit training texts, preferring the postprocessed corpus.
+
+    reddit_postprocess.py strips the `Title:`/`Content:`/`Comment:` scaffolding and
+    rewrites the corpus as uniform chunks. Falling back to the raw collection keeps
+    older setups working, but those rows carry the scaffolding and can be tens of
+    thousands of tokens long, so almost all of each row is truncated away.
+
+    Args:
+        parquet_path (str, optional): Explicit file to load. Auto-detected if None.
+
+    Returns:
+        list of str: Training texts
+
+    Raises:
+        FileNotFoundError: If neither corpus is present
+    """
+    if parquet_path is None:
+        if os.path.exists(REDDIT_TEXT_PATH):
+            parquet_path = REDDIT_TEXT_PATH
+        elif os.path.exists(REDDIT_RAW_PATH):
+            parquet_path = REDDIT_RAW_PATH
+        else:
+            raise FileNotFoundError(
+                f"No Reddit corpus found. Collect and postprocess it first:\n"
+                f"    python data_collection.py --dataset reddit\n"
+                f"    python reddit_postprocess.py --max_tokens <your --max_length>"
+            )
+
+    print(f"Loading Reddit data from {parquet_path}")
+    df = pd.read_parquet(parquet_path)
+
+    if 'text' in df.columns:
+        texts = df['text'].tolist()
+        print(f"Loaded {len(texts):,} postprocessed Reddit chunks")
+    elif 'combined_text' in df.columns:
+        texts = df['combined_text'].tolist()
+        print(f"Loaded {len(texts):,} raw Reddit posts")
+        print("  WARNING: this is the unprocessed corpus. Each row still contains the")
+        print("  Title:/Content:/Comment: scaffolding and may be far longer than")
+        print("  max_length, so most of it will be truncated. Run:")
+        print("      python reddit_postprocess.py --max_tokens <your --max_length>")
+    else:
+        raise ValueError(
+            f"{parquet_path} has neither a 'text' nor a 'combined_text' column "
+            f"(found: {list(df.columns)})"
+        )
+    return texts
+
+
+def get_reddit_dataloaders(parquet_path=None, batch_size=32, max_length=512,
                            val_split=0.1, tokenizer_type="byte-level-bpe"):
     """
     Load Reddit data from parquet file and create dataloaders.
-    
+
     Args:
-        parquet_path (str): Path to the parquet file containing Reddit data
+        parquet_path (str, optional): Parquet to load. Prefers the postprocessed
+            corpus at data/reddit_text.parquet when None.
         batch_size (int): Batch size for training
         max_length (int): Maximum sequence length
         val_split (float): Fraction of data to use for validation
         tokenizer_type (str): Type of tokenizer to use
-        
+
     Returns:
         tuple: (train_loader, val_loader, tokenizer)
     """
-    # Load Reddit data
-    print(f"Loading Reddit data from {parquet_path}")
-    df = pd.read_parquet(parquet_path)
-    
-    # Get text data
-    texts = df['combined_text'].tolist()
-    print(f"Loaded {len(texts)} Reddit posts and comments")
-    
+    texts = load_reddit_texts(parquet_path)
+
     # Create or load tokenizer
     if os.path.exists("tokenizer/vocab.json"):
         print("Loading existing tokenizer")
+        print("  NOTE: the cached tokenizer in tokenizer/ is reused as-is. If it was")
+        print("  trained on a different corpus it will compress Reddit prose poorly.")
+        print("  Delete tokenizer/ or run: python tokenizer.py --dataset_type reddit")
         tokenizer = create_tokenizer(tokenizer_type)
     else:
         print("Training new tokenizer on Reddit data")
@@ -168,9 +233,10 @@ def get_reddit_dataloaders(parquet_path='data/reddit_posts.parquet', batch_size=
     
     print(f"Training on {len(train_texts)} samples, validating on {len(val_texts)} samples")
     
-    # Create datasets
-    train_dataset = RedditDataset(train_texts, tokenizer, max_length)
-    val_dataset = RedditDataset(val_texts, tokenizer, max_length)
+    # Pre-tokenise once rather than per epoch. Postprocessed chunks are bounded by
+    # max_tokens, so the contiguous tensor stays small.
+    train_dataset = TransformerDataset(train_texts, tokenizer, max_length)
+    val_dataset = TransformerDataset(val_texts, tokenizer, max_length)
     
     # Create dataloaders
     train_loader = DataLoader(
@@ -178,7 +244,8 @@ def get_reddit_dataloaders(parquet_path='data/reddit_posts.parquet', batch_size=
         batch_size=batch_size,
         shuffle=True,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True
     )
     
     val_loader = DataLoader(
@@ -186,7 +253,8 @@ def get_reddit_dataloaders(parquet_path='data/reddit_posts.parquet', batch_size=
         batch_size=batch_size,
         shuffle=False,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True
     )
     
     return train_loader, val_loader, tokenizer
@@ -264,7 +332,8 @@ def get_bluesky_dataloaders(parquet_path='data/bluesky_posts.parquet', batch_siz
         batch_size=batch_size,
         shuffle=True,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True
     )
     
     val_loader = DataLoader(
@@ -272,10 +341,83 @@ def get_bluesky_dataloaders(parquet_path='data/bluesky_posts.parquet', batch_siz
         batch_size=batch_size,
         shuffle=False,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True
     )
     
     return train_loader, val_loader, tokenizer
+
+TINYSTORIES_TEXT_PATH = 'data/tinystories_text.parquet'
+TINYSTORIES_RAW_PATH = 'data/tinystories.parquet'
+
+
+def get_tinystories_dataloaders(parquet_path=None, batch_size=32, max_length=320,
+                                val_split=0.1, tokenizer_type="byte-level-bpe"):
+    """
+    Build dataloaders over the TinyStories corpus.
+
+    Args:
+        parquet_path (str, optional): Parquet to load. Prefers the postprocessed
+            corpus at data/tinystories_text.parquet when None.
+        batch_size (int): Batch size for training
+        max_length (int): Maximum sequence length
+        val_split (float): Fraction held out for validation
+        tokenizer_type (str): Type of tokenizer to use
+
+    Returns:
+        tuple: (train_loader, val_loader, tokenizer)
+
+    Raises:
+        FileNotFoundError: If no TinyStories corpus is present
+    """
+    if parquet_path is None:
+        if os.path.exists(TINYSTORIES_TEXT_PATH):
+            parquet_path = TINYSTORIES_TEXT_PATH
+        elif os.path.exists(TINYSTORIES_RAW_PATH):
+            parquet_path = TINYSTORIES_RAW_PATH
+            print("  WARNING: using the raw download. Run tinystories_postprocess.py to")
+            print("  normalise, deduplicate and length-bound it first.")
+        else:
+            raise FileNotFoundError(
+                "No TinyStories corpus found. Download and postprocess it first:\n"
+                "    python data_collection.py --dataset tinystories\n"
+                "    python tinystories_postprocess.py --max_tokens <your --max_length>"
+            )
+
+    print(f"Loading TinyStories from {parquet_path}")
+    texts = pd.read_parquet(parquet_path)['text'].tolist()
+    print(f"Loaded {len(texts):,} stories")
+
+    if os.path.exists("tokenizer/vocab.json"):
+        print("Loading existing tokenizer")
+        print("  NOTE: the cached tokenizer in tokenizer/ is reused as-is. Rebuild it")
+        print("  for this corpus with: python tokenizer.py --dataset_type tinystories")
+        tokenizer = create_tokenizer(tokenizer_type)
+    else:
+        raise FileNotFoundError(
+            "No tokenizer found. Build one first:\n"
+            "    python tokenizer.py --dataset_type tinystories"
+        )
+
+    # Shuffle before splitting: an ordered corpus otherwise puts a systematically
+    # different slice in validation than in training.
+    rng = np.random.default_rng(42)
+    order = rng.permutation(len(texts))
+    texts = [texts[i] for i in order]
+
+    num_val = int(len(texts) * val_split)
+    train_texts, val_texts = texts[num_val:], texts[:num_val]
+    print(f"Training on {len(train_texts):,} samples, validating on {len(val_texts):,}")
+
+    train_dataset = TransformerDataset(train_texts, tokenizer, max_length)
+    val_dataset = TransformerDataset(val_texts, tokenizer, max_length)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False,
+                            num_workers=4, pin_memory=True, persistent_workers=True)
+    return train_loader, val_loader, tokenizer
+
 
 def get_dataloaders(batch_size=32, max_length=512, dataset_type="imdb"):
     """
@@ -289,6 +431,8 @@ def get_dataloaders(batch_size=32, max_length=512, dataset_type="imdb"):
     Returns:
         tuple: (train_loader, val_loader, tokenizer)
     """
+    if dataset_type == "tinystories":
+        return get_tinystories_dataloaders(batch_size=batch_size, max_length=max_length)
     if dataset_type == "reddit":
         return get_reddit_dataloaders(batch_size=batch_size, max_length=max_length)
     elif dataset_type == "bluesky":
@@ -361,7 +505,8 @@ def get_dataloaders(batch_size=32, max_length=512, dataset_type="imdb"):
         batch_size=batch_size,
         shuffle=True,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True
     )
     
     val_loader = DataLoader(
@@ -369,7 +514,8 @@ def get_dataloaders(batch_size=32, max_length=512, dataset_type="imdb"):
         batch_size=batch_size,
         shuffle=False,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=True
     )
     
     return train_loader, val_loader, tokenizer

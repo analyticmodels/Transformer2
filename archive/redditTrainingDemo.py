@@ -6,7 +6,7 @@ This script demonstrates the complete workflow for:
 2. Training the transformer model on the collected data using trainingSetup.py
 
 Usage:
-    python redditTrainingDemo.py --client_id YOUR_REDDIT_CLIENT_ID --client_secret YOUR_REDDIT_CLIENT_SECRET
+    python redditTrainingDemo.py   # credentials from .env
 """
 
 import argparse
@@ -28,8 +28,7 @@ def collect_reddit_data(args):
     # Build command for data collection
     cmd = [
         'python', 'getRedditTraining.py',
-        '--client_id', '***REMOVED***',
-        '--client_secret', '***REMOVED***',
+        # Credentials come from REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET in .env
         '--user_agent', 'python:llm-training-data:v1.0 (by /u/analyticmodels)'
     ]
     

@@ -1,13 +1,15 @@
 import torch
-import os
 from coreTransformer import SmallTransformer
 from tokenizer import create_tokenizer
 
 # ollama_integration is imported lazily inside the use_ollama branches so that the
 # local inference path does not depend on it (or on `requests`) at all.
 
-# Set environment variables
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+# Note: this module deliberately does not set TOKENIZERS_PARALLELISM. Doing so at import
+# time is process-wide, and disabling it makes the batched tokenization in dataloader.py
+# roughly six times slower for anything that imports this module first (a notebook that
+# generates and then trains, for example). Inference encodes one prompt at a time and
+# forks nothing, so it gains nothing from the setting either way.
 
 def infer_architecture(state_dict, config=None, num_heads_override=None):
     """

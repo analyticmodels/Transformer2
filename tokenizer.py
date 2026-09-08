@@ -24,6 +24,22 @@ class BaseTokenizerWrapper(ABC):
     def get_pad_token_id(self):
         pass
 
+    def encode_batch(self, texts):
+        """
+        Encode many texts at once.
+
+        This default just loops. Wrappers whose backend has native batch support should
+        override it: the Rust tokenizers release the GIL and encode a batch across all
+        cores, which is several times faster than calling encode() per text.
+
+        Args:
+            texts (iterable of str): Texts to encode
+
+        Returns:
+            list of dict: One {'input_ids', 'attention_mask'} mapping per text, in order
+        """
+        return [self.encode(text) for text in texts]
+
     def get_eos_token_id(self):
         """ID of the end-of-sequence token, or None if the tokenizer has none."""
         return None
@@ -35,6 +51,7 @@ class BaseTokenizerWrapper(ABC):
 class ByteLevelBPETokenizerWrapper(BaseTokenizerWrapper):
     SPECIAL_TOKENS = ["<s>", "</s>", "<pad>", "<unk>"]
     EOS_TOKEN = "</s>"
+    PAD_TOKEN = "<pad>"
 
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
@@ -51,14 +68,27 @@ class ByteLevelBPETokenizerWrapper(BaseTokenizerWrapper):
             'attention_mask': attention_mask
         }
     
+    def encode_batch(self, texts):
+        pad_token_id = self.get_pad_token_id()
+        return [
+            {
+                'input_ids': encoding.ids,
+                'attention_mask': [1 if i != pad_token_id else 0 for i in encoding.ids],
+            }
+            for encoding in self.tokenizer.encode_batch(list(texts))
+        ]
+
     def decode(self, ids):
         return self.tokenizer.decode(ids)
-    
+
     def get_vocab_size(self):
         return self._vocab_size
 
     def get_pad_token_id(self):
-        return 0  # Default pad token ID
+        # Resolve <pad> from the vocabulary rather than assuming index 0, which is
+        # <s> in this project's special-token order.
+        pad_id = self.tokenizer.token_to_id(self.PAD_TOKEN)
+        return pad_id if pad_id is not None else 0
 
     def get_eos_token_id(self):
         return self.tokenizer.token_to_id(self.EOS_TOKEN)
@@ -79,7 +109,18 @@ class HuggingFaceTokenizerWrapper(BaseTokenizerWrapper):
             truncation=True,
             return_attention_mask=True
         )
-    
+
+    def encode_batch(self, texts):
+        batch = self.tokenizer(
+            list(texts),
+            truncation=True,
+            return_attention_mask=True
+        )
+        return [
+            {'input_ids': ids, 'attention_mask': mask}
+            for ids, mask in zip(batch['input_ids'], batch['attention_mask'])
+        ]
+
     def decode(self, ids):
         return self.tokenizer.decode(ids)
     
@@ -170,6 +211,24 @@ def train_byte_level_tokenizer(dataset_type, vocab_size=50000, min_frequency=2):
                     if text and text.strip():  # Skip empty lines
                         f.write(text + "\n")
     
+    elif dataset_type == "tinystories":
+        # Prefer the postprocessed corpus; fall back to the raw download
+        for candidate in ("data/tinystories_text.parquet", "data/tinystories.parquet"):
+            if os.path.exists(candidate):
+                print(f"Loading TinyStories data from {candidate}")
+                df = pd.read_parquet(candidate)
+                with open(training_data_path, "w", encoding="utf-8") as f:
+                    for text in df['text']:
+                        if text and text.strip():
+                            f.write(text.replace("\n", " ") + "\n")
+                print(f"Saved {len(df)} stories to {training_data_path}")
+                break
+        else:
+            raise FileNotFoundError(
+                "No TinyStories corpus found. Download it first:\n"
+                "    python data_collection.py --dataset tinystories"
+            )
+
     elif dataset_type == "wikitext":
         dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
         text_field = "text"
@@ -279,7 +338,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Prepare tokenizer for transformer model")
-    parser.add_argument('--dataset_type', type=str, default='bluesky', choices=['bluesky', 'reddit', 'wikitext', 'imdb'],
+    parser.add_argument('--dataset_type', type=str, default='bluesky', choices=['bluesky', 'reddit', 'wikitext', 'imdb', 'tinystories'],
                        help='Dataset to use for tokenizer training (bluesky, reddit, wikitext, imdb)')
     parser.add_argument('--vocab_size', type=int, default=50000,
                        help='Vocabulary size for the tokenizer')

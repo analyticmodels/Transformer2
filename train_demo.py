@@ -9,14 +9,16 @@ Usage:
     # For Bluesky training:
     python train_demo.py --dataset bluesky
     
-    # For Reddit training:
-    python train_demo.py --dataset reddit --client_id YOUR_REDDIT_CLIENT_ID --client_secret YOUR_REDDIT_CLIENT_SECRET
+    # For Reddit training (credentials come from .env; see .env.example):
+    python train_demo.py --dataset reddit
 """
 
 import argparse
 import os
 import sys
 import time
+
+from config import reddit_credentials
 
 def check_data_exists(dataset_type):
     """Check if the data file exists for the specified dataset type."""
@@ -123,8 +125,10 @@ def main():
                        help='Dataset to use for training')
     
     # Reddit API credentials
-    parser.add_argument('--client_id', help='Reddit API client ID (required for Reddit)')
-    parser.add_argument('--client_secret', help='Reddit API client secret (required for Reddit)')
+    parser.add_argument('--client_id', help='Reddit API client ID. Prefer REDDIT_CLIENT_ID '
+                                            'in .env; command-line secrets leak into shell history')
+    parser.add_argument('--client_secret', help='Reddit API client secret. Prefer '
+                                                'REDDIT_CLIENT_SECRET in .env')
     parser.add_argument('--user_agent', default='python:transformer-training:v1.0', 
                         help='User agent string for Reddit API')
     
@@ -173,10 +177,19 @@ def main():
     
     args = parser.parse_args()
     
-    # Validate arguments
-    if args.dataset == 'reddit' and (not args.client_id or not args.client_secret) and not args.skip_data_collection:
-        if not check_data_exists('reddit'):
-            parser.error("Reddit data collection requires --client_id and --client_secret")
+    # Validate arguments. Credentials may come from .env rather than the command line,
+    # so resolve them before deciding whether collection is possible.
+    if args.dataset == 'reddit' and not args.skip_data_collection:
+        client_id, client_secret, _ = reddit_credentials(
+            client_id=args.client_id, client_secret=args.client_secret
+        )
+        if not client_id or not client_secret:
+            if not check_data_exists('reddit'):
+                parser.error(
+                    "Reddit data collection requires credentials. Set REDDIT_CLIENT_ID and "
+                    "REDDIT_CLIENT_SECRET in .env (see .env.example), or pass "
+                    "--client_id/--client_secret."
+                )
     
     print("\n" + "="*80)
     print(f"Transformer Training Demo: {args.dataset.capitalize()} Dataset")
