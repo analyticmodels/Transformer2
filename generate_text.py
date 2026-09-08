@@ -14,13 +14,14 @@ import json
 import torch
 from inference import load_model, generate_text
 import os
+from paths import output_dir
 
 def main():
     parser = argparse.ArgumentParser(description='Generate text using optimized parameters')
     parser.add_argument('--prompt', type=str, required=True,
                         help='Prompt to generate text from')
-    parser.add_argument('--params', type=str, default='inference_params.json',
-                        help='JSON file with optimized parameters')
+    parser.add_argument('--params', type=str, default=None,
+                        help='JSON file with tuned parameters (default: <outputs>/inference_params.json)')
     parser.add_argument('--model_path', type=str, default='best_model.pt',
                         help='Path to the model checkpoint')
     parser.add_argument('--dataset_type', type=str, default='bluesky',
@@ -36,6 +37,7 @@ def main():
     args = parser.parse_args()
     
     # Check if parameter file exists
+    args.params = str(args.params or output_dir() / 'inference_params.json')
     if not os.path.exists(args.params):
         print(f"Error: Parameter file {args.params} not found.")
         return

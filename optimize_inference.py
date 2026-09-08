@@ -17,6 +17,7 @@ from tqdm import tqdm
 import time
 import json
 from inference import load_model, generate_text
+from paths import ensure, output_dir
 
 # Optional: only import if available
 try:
@@ -239,8 +240,8 @@ def main():
                         help='Metric to optimize for')
     parser.add_argument('--num_samples', type=int, default=3,
                         help='Number of samples to generate for each parameter combination')
-    parser.add_argument('--output', type=str, default='inference_params.json',
-                        help='Output file to save best parameters')
+    parser.add_argument('--output', type=str, default=None,
+                        help='Output file for the best parameters (default: <outputs>/inference_params.json)')
     parser.add_argument('--temperature_min', type=float, default=0.5, help='Minimum temperature')
     parser.add_argument('--temperature_max', type=float, default=1.0, help='Maximum temperature')
     parser.add_argument('--temperature_steps', type=int, default=3, help='Number of temperature steps')
@@ -347,10 +348,11 @@ def main():
         'all_results': results[:10]  # Save top 10 results
     })
     
-    with open(args.output, 'w') as f:
+    output_path = ensure(args.output or output_dir() / 'inference_params.json')
+    with open(output_path, 'w') as f:
         json.dump(output_data, f, indent=2)
     
-    print(f"\nBest parameters saved to {args.output}")
+    print(f"\nBest parameters saved to {output_path}")
     print(f"Best parameters: temp={best_params['temperature']:.2f}, top_k={best_params['top_k']}, "
           f"top_p={best_params['top_p']:.2f}, rep_penalty={best_params['repetition_penalty']:.2f}")
     

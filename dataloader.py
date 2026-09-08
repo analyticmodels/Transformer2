@@ -8,6 +8,7 @@ from tokenizers import ByteLevelBPETokenizer
 from tqdm import tqdm
 
 from tokenizer import create_tokenizer
+from paths import data_dir
 
 def build_labels(input_ids, length, max_length):
     """
@@ -118,8 +119,8 @@ class RedditDataset(Dataset):
             'labels': build_labels(input_ids, length, self.max_length),
         }
 
-REDDIT_TEXT_PATH = 'data/reddit_text.parquet'
-REDDIT_RAW_PATH = 'data/reddit_posts.parquet'
+REDDIT_TEXT_NAME = 'reddit_text.parquet'
+REDDIT_RAW_NAME = 'reddit_posts.parquet'
 
 
 def load_reddit_texts(parquet_path=None):
@@ -141,10 +142,10 @@ def load_reddit_texts(parquet_path=None):
         FileNotFoundError: If neither corpus is present
     """
     if parquet_path is None:
-        if os.path.exists(REDDIT_TEXT_PATH):
-            parquet_path = REDDIT_TEXT_PATH
-        elif os.path.exists(REDDIT_RAW_PATH):
-            parquet_path = REDDIT_RAW_PATH
+        if (data_dir() / REDDIT_TEXT_NAME).exists():
+            parquet_path = str(data_dir() / REDDIT_TEXT_NAME)
+        elif (data_dir() / REDDIT_RAW_NAME).exists():
+            parquet_path = str(data_dir() / REDDIT_RAW_NAME)
         else:
             raise FileNotFoundError(
                 f"No Reddit corpus found. Collect and postprocess it first:\n"
@@ -258,7 +259,7 @@ def get_reddit_dataloaders(parquet_path=None, batch_size=32, max_length=512,
     
     return train_loader, val_loader, tokenizer
 
-def get_bluesky_dataloaders(parquet_path='data/bluesky_posts.parquet', batch_size=32, max_length=512, 
+def get_bluesky_dataloaders(parquet_path=None, batch_size=32, max_length=512, 
                            val_split=0.1, tokenizer_type="byte-level-bpe"):
     """
     Load Bluesky data from parquet file and create dataloaders.
@@ -274,6 +275,7 @@ def get_bluesky_dataloaders(parquet_path='data/bluesky_posts.parquet', batch_siz
         tuple: (train_loader, val_loader, tokenizer)
     """
     # Load Bluesky data
+    parquet_path = str(parquet_path or data_dir() / 'bluesky_posts.parquet')
     print(f"Loading Bluesky data from {parquet_path}")
     df = pd.read_parquet(parquet_path)
     
@@ -346,8 +348,8 @@ def get_bluesky_dataloaders(parquet_path='data/bluesky_posts.parquet', batch_siz
     
     return train_loader, val_loader, tokenizer
 
-TINYSTORIES_TEXT_PATH = 'data/tinystories_text.parquet'
-TINYSTORIES_RAW_PATH = 'data/tinystories.parquet'
+TINYSTORIES_TEXT_NAME = 'tinystories_text.parquet'
+TINYSTORIES_RAW_NAME = 'tinystories.parquet'
 
 
 def get_tinystories_dataloaders(parquet_path=None, batch_size=32, max_length=320,
@@ -370,10 +372,10 @@ def get_tinystories_dataloaders(parquet_path=None, batch_size=32, max_length=320
         FileNotFoundError: If no TinyStories corpus is present
     """
     if parquet_path is None:
-        if os.path.exists(TINYSTORIES_TEXT_PATH):
-            parquet_path = TINYSTORIES_TEXT_PATH
-        elif os.path.exists(TINYSTORIES_RAW_PATH):
-            parquet_path = TINYSTORIES_RAW_PATH
+        if (data_dir() / TINYSTORIES_TEXT_NAME).exists():
+            parquet_path = str(data_dir() / TINYSTORIES_TEXT_NAME)
+        elif (data_dir() / TINYSTORIES_RAW_NAME).exists():
+            parquet_path = str(data_dir() / TINYSTORIES_RAW_NAME)
             print("  WARNING: using the raw download. Run tinystories_postprocess.py to")
             print("  normalise, deduplicate and length-bound it first.")
         else:

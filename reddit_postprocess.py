@@ -28,9 +28,10 @@ from tqdm import tqdm
 
 from text_chunking import chunk_segments, enforce_budget, split_oversized  # noqa: F401
 from tokenizer import create_tokenizer
+from paths import data_dir
 
-DEFAULT_INPUT = "data/reddit_posts.parquet"
-DEFAULT_OUTPUT = "data/reddit_text.parquet"
+INPUT_NAME = "reddit_posts.parquet"
+OUTPUT_NAME = "reddit_text.parquet"
 
 # Reddit placeholders for content that no longer exists
 DELETED_MARKERS = {"[deleted]", "[removed]", "[deleted by user]", ""}
@@ -105,7 +106,7 @@ def post_segments(row, keep_titles=False):
     return [cleaned for cleaned in (clean_text(s) for s in segments) if cleaned]
 
 
-def postprocess_reddit_data(input_path=DEFAULT_INPUT, output_path=DEFAULT_OUTPUT,
+def postprocess_reddit_data(input_path=None, output_path=None,
                             max_tokens=512, min_tokens=32, keep_titles=False,
                             tokenizer=None, drop_duplicates=True):
     """
@@ -126,6 +127,9 @@ def postprocess_reddit_data(input_path=DEFAULT_INPUT, output_path=DEFAULT_OUTPUT
     Raises:
         FileNotFoundError: If input_path does not exist
     """
+    input_path = str(input_path or data_dir() / INPUT_NAME)
+    output_path = str(output_path or data_dir() / OUTPUT_NAME)
+
     if not os.path.exists(input_path):
         raise FileNotFoundError(
             f"{input_path} not found. Collect Reddit data first:\n"
@@ -175,10 +179,10 @@ def main():
     parser = argparse.ArgumentParser(
         description='Strip metadata from collected Reddit posts and chunk them for training'
     )
-    parser.add_argument('--input', default=DEFAULT_INPUT,
-                        help=f'Collected posts parquet (default: {DEFAULT_INPUT})')
-    parser.add_argument('--output', default=DEFAULT_OUTPUT,
-                        help=f'Destination parquet (default: {DEFAULT_OUTPUT})')
+    parser.add_argument('--input', default=None,
+                        help=f'Collected posts parquet (default: <data>/{INPUT_NAME})')
+    parser.add_argument('--output', default=None,
+                        help=f'Destination parquet (default: <data>/{OUTPUT_NAME})')
     parser.add_argument('--max_tokens', type=int, default=512,
                         help='Maximum tokens per chunk; set this to your training --max_length')
     parser.add_argument('--min_tokens', type=int, default=32,

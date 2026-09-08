@@ -6,12 +6,14 @@ import time
 from datasets import load_dataset
 
 from config import reddit_credentials
+from paths import data_dir
 
-# Set constants. Directories are created at write time, not import time: importing
-# this module (tests do) must not litter the working directory.
-DATA_DIR = "data"
+# Corpus filenames; the directory they live in comes from paths.data_dir().
+BLUESKY_NAME = "bluesky_posts.parquet"
+TINYSTORIES_NAME = "tinystories.parquet"
+REDDIT_NAME = "reddit_posts.parquet"
 
-def download_bluesky_dataset(output_path="data/bluesky_posts.parquet", max_samples=10000):
+def download_bluesky_dataset(output_path=None, max_samples=10000):
     """
     Download the Bluesky dataset from Hugging Face and save it as a parquet file.
     
@@ -22,6 +24,7 @@ def download_bluesky_dataset(output_path="data/bluesky_posts.parquet", max_sampl
     Returns:
         pd.DataFrame: The processed dataset
     """
+    output_path = str(output_path or data_dir() / BLUESKY_NAME)
     print(f"Downloading Bluesky dataset from Hugging Face (alpindale/two-million-bluesky-posts)")
     
     # Create data directory if it doesn't exist
@@ -70,7 +73,7 @@ def download_bluesky_dataset(output_path="data/bluesky_posts.parquet", max_sampl
     return processed_df
 
 
-def collect_tinystories(output_path="data/tinystories.parquet", max_samples=None,
+def collect_tinystories(output_path=None, max_samples=None,
                         split="train"):
     """
     Download the TinyStories corpus.
@@ -88,6 +91,7 @@ def collect_tinystories(output_path="data/tinystories.parquet", max_samples=None
     Returns:
         pandas.DataFrame: The stories, with a single `text` column
     """
+    output_path = str(output_path or data_dir() / TINYSTORIES_NAME)
     print(f"Downloading TinyStories ({split} split) from Hugging Face...")
     dataset = load_dataset("roneneldan/TinyStories", split=split)
 
@@ -107,7 +111,7 @@ def collect_tinystories(output_path="data/tinystories.parquet", max_samples=None
     return df
 
 
-def collect_reddit_data(output_path="data/reddit_posts.parquet", subreddits=None, limit=500, post_types=None, 
+def collect_reddit_data(output_path=None, subreddits=None, limit=500, post_types=None, 
                         client_id=None, client_secret=None, user_agent=None):
     """
     Fetch Reddit posts for training data.
@@ -124,6 +128,8 @@ def collect_reddit_data(output_path="data/reddit_posts.parquet", subreddits=None
     Returns:
         pd.DataFrame: The processed dataset
     """
+    output_path = str(output_path or data_dir() / REDDIT_NAME)
+
     try:
         import praw
     except ImportError:
@@ -297,17 +303,17 @@ def collect_data(dataset_type, output_path=None, **kwargs):
     """
     if dataset_type == 'tinystories':
         if output_path is None:
-            output_path = os.path.join(DATA_DIR, 'tinystories.parquet')
+            output_path = str(data_dir() / TINYSTORIES_NAME)
         return collect_tinystories(output_path=output_path, **kwargs)
 
     elif dataset_type == 'bluesky':
         if output_path is None:
-            output_path = os.path.join(DATA_DIR, 'bluesky_posts.parquet')
+            output_path = str(data_dir() / BLUESKY_NAME)
         return download_bluesky_dataset(output_path=output_path, **kwargs)
     
     elif dataset_type == 'reddit':
         if output_path is None:
-            output_path = os.path.join(DATA_DIR, 'reddit_posts.parquet')
+            output_path = str(data_dir() / REDDIT_NAME)
         return collect_reddit_data(output_path=output_path, **kwargs)
     
     else:

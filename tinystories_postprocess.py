@@ -23,9 +23,10 @@ from tqdm import tqdm
 
 from text_chunking import chunk_segments
 from tokenizer import create_tokenizer
+from paths import data_dir
 
-DEFAULT_INPUT = "data/tinystories.parquet"
-DEFAULT_OUTPUT = "data/tinystories_text.parquet"
+INPUT_NAME = "tinystories.parquet"
+OUTPUT_NAME = "tinystories_text.parquet"
 
 WHITESPACE_RE = re.compile(r'[ \t]+')
 BLANK_LINES_RE = re.compile(r'\n{3,}')
@@ -52,7 +53,7 @@ def clean_story(text):
     return '\n'.join(line.strip() for line in text.split('\n')).strip()
 
 
-def postprocess_tinystories(input_path=DEFAULT_INPUT, output_path=DEFAULT_OUTPUT,
+def postprocess_tinystories(input_path=None, output_path=None,
                             max_tokens=320, min_tokens=32, tokenizer=None,
                             drop_duplicates=True, batch_size=20000):
     """
@@ -73,6 +74,9 @@ def postprocess_tinystories(input_path=DEFAULT_INPUT, output_path=DEFAULT_OUTPUT
     Raises:
         FileNotFoundError: If input_path does not exist
     """
+    input_path = str(input_path or data_dir() / INPUT_NAME)
+    output_path = str(output_path or data_dir() / OUTPUT_NAME)
+
     if not os.path.exists(input_path):
         raise FileNotFoundError(
             f"{input_path} not found. Download it first:\n"
@@ -133,10 +137,10 @@ def postprocess_tinystories(input_path=DEFAULT_INPUT, output_path=DEFAULT_OUTPUT
 
 def main():
     parser = argparse.ArgumentParser(description='Prepare TinyStories for training')
-    parser.add_argument('--input', default=DEFAULT_INPUT,
-                        help=f'Downloaded stories parquet (default: {DEFAULT_INPUT})')
-    parser.add_argument('--output', default=DEFAULT_OUTPUT,
-                        help=f'Destination parquet (default: {DEFAULT_OUTPUT})')
+    parser.add_argument('--input', default=None,
+                        help=f'Downloaded stories parquet (default: <data>/{INPUT_NAME})')
+    parser.add_argument('--output', default=None,
+                        help=f'Destination parquet (default: <data>/{OUTPUT_NAME})')
     parser.add_argument('--max_tokens', type=int, default=320,
                         help='Maximum tokens per row; set this to your training --max_length')
     parser.add_argument('--min_tokens', type=int, default=32,

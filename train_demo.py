@@ -19,13 +19,14 @@ import sys
 import time
 
 from config import reddit_credentials
+from paths import data_dir
 
 def check_data_exists(dataset_type):
     """Check if the data file exists for the specified dataset type."""
     if dataset_type == 'bluesky':
-        return os.path.exists('data/bluesky_posts.parquet')
+        return (data_dir() / 'bluesky_posts.parquet').exists()
     elif dataset_type == 'reddit':
-        return os.path.exists('data/reddit_posts.parquet')
+        return (data_dir() / 'reddit_posts.parquet').exists()
     else:
         return False
 
