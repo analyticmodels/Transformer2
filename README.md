@@ -5,7 +5,7 @@ A PyTorch implementation of a transformer model for natural language generation.
 ## Features
 
 - Custom decoder-only transformer with multi-head attention and pre-norm blocks
-- Data collection from multiple sources (Reddit, Bluesky)
+- Data collection from multiple sources (Project Gutenberg, TinyStories, Reddit, Bluesky)
 - Curriculum learning with sequence length progression
 - Mixed precision training with gradient accumulation
 - Text generation with temperature, top-k, top-p and repetition penalty
@@ -27,9 +27,10 @@ src/transformer2/
 ├── data/
 │   ├── collection.py        Download Bluesky / TinyStories, fetch Reddit
 │   ├── postprocess.py       t2-postprocess dispatcher
+│   ├── gutenberg.py         Mirror downloads, boilerplate stripping, book chunking
 │   ├── reddit.py            Strip discussion scaffolding, chunk by post
 │   ├── tinystories.py       Normalise, deduplicate, length-bound
-│   ├── chunking.py          Corpus-agnostic chunking shared by both
+│   ├── chunking.py          Corpus-agnostic chunking shared by all three
 │   └── loaders.py           Datasets and DataLoaders
 ├── training/
 │   ├── trainer.py           Training loop and checkpointing
@@ -117,6 +118,10 @@ t2-collect --dataset bluesky --max_samples 10000
 
 # Collect Reddit data
 t2-collect --dataset reddit   # credentials from .env
+
+# Project Gutenberg: ~62k public-domain English books (~24 GB, ~5B tokens)
+t2-collect --dataset gutenberg --max_books 20    # try the mirror first
+t2-collect --dataset gutenberg                   # then the whole subset
 ```
 
 `--max_samples` defaults to collecting **everything**. Pass it explicitly to cap a
@@ -125,6 +130,66 @@ download; omitting it no longer silently truncates an existing corpus.
 Collected data is written to `data/` as a parquet file. Note that re-running
 collection **overwrites** the existing file, so a smaller `--max_samples` than a
 previous run will shrink the corpus.
+
+#### Project Gutenberg
+
+Gutenberg is the only long-form corpus here: edited literary prose rather than
+posts or synthetic short stories, which is what gives the model paragraph-scale
+structure and a vocabulary large enough to justify 50k BPE tokens.
+
+The full English subset is ~62,000 books, **~24 GB of plain text and roughly 5
+billion tokens** (measured across a 56,000-book download, not estimated). Note that
+the 1-2 TB figure usually quoted for Project Gutenberg is the *complete* mirror --
+every format and language, images, audio and superseded revisions. This collector
+fetches a single plain-text file per English book, which is a small fraction of it.
+
+At that size the collector behaves differently from the others:
+
+- **It streams.** Books are flushed to parquet in row groups as they arrive, and
+  postprocessing reads them back in batches. The corpus is never held in memory.
+- **It downloads from a mirror.** `gutenberg.org` blocks bulk crawling and directs
+  heavy users to its mirrors, so books come from `--mirror` (default
+  `https://mirrors.xmission.com/gutenberg`) at `--delay` seconds per request.
+  Only the catalog is fetched from the main site.
+- **It resumes.** Raw books are cached under `data/gutenberg_raw/` and never
+  re-fetched. A full run takes about a day at the default 1 req/s; interrupt it
+  freely and re-run the same command to continue.
+
+```bash
+t2-collect --dataset gutenberg --delay 1.0
+t2-tokenizer --dataset_type gutenberg
+t2-postprocess gutenberg --max_tokens 512
+```
+
+Postprocessing strips the Project Gutenberg header, footer and license, undoes
+the ~70-column hard wrapping so paragraphs are single lines, and chunks each book
+**on its own** — a chunk never runs from the end of one work into the start of an
+unrelated one. Books with no recognisable Gutenberg markers are skipped rather
+than ingested, so the license text never reaches the corpus.
+
+Because the corpus is far larger than VRAM, `t2-train --dataset gutenberg` samples
+500,000 chunks by default. `--max_texts` raises or removes the cap; rows are drawn
+from across the corpus, not off the front, so a sample is a cross-section rather
+than the first few hundred books.
+
+Peak system RAM is roughly 5.5 GB per million chunks (the decoded text plus the
+`[N, max_length]` int32 token array), measured on the 11.76M-chunk corpus:
+
+| `--max_texts` | tokens | peak RSS |
+|---|---|---|
+| 500,000 (default) | ~0.2B | ~3 GB |
+| 4,000,000 | ~1.6B | ~29 GB |
+| 8,000,000 | ~3.2B | ~57 GB |
+| 0 (all 11.76M) | ~4.8B | ~85 GB |
+
+`--max_texts 0` needs more RAM than a 96 GB machine has once the DataLoader workers
+are up; 4-8 million is the practical range there. Exceeding it gets the process
+killed by the kernel OOM killer, which looks like training dying without a Python
+traceback -- check `journalctl -k | grep -i oom` if that happens.
+
+Note that removing the Gutenberg header — which training requires — means the
+resulting corpus may not be redistributed under the Project Gutenberg trademark.
+It is fine for local training.
 
 #### Reddit postprocessing (required)
 
@@ -183,6 +248,9 @@ t2-train --dataset bluesky --batch_size 8 --epochs 30
 # Curriculum learning
 t2-train --dataset reddit --batch_size 8 --epochs 30 --use_curriculum
 
+# Gutenberg, capped to what fits in memory (default 500k chunks)
+t2-train --dataset gutenberg --max_length 512 --max_texts 4000000
+
 # Custom architecture
 t2-train --dataset bluesky --d_model 512 --num_heads 16 --num_layers 8 --d_ff 2048
 ```
@@ -201,7 +269,11 @@ with any optimizer selects the OneCycle schedule.
 t2-generate
 
 # Generate text from a prompt
-t2-generate --prompt "Once upon a time" --temperature 0.7 --top_k 50
+@@@@@
+
+
+
+fffff
 
 # Load a specific checkpoint
 t2-generate --model_path checkpoints/checkpoint_epoch_10.pt --num_heads 8 --prompt "Once upon a time"

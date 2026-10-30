@@ -4,6 +4,7 @@ from transformers import PreTrainedTokenizerFast, GPT2Tokenizer
 import numpy as np
 import os
 import pandas as pd
+import pyarrow.parquet as pq
 from tqdm import tqdm
 
 from transformer2.tokenization.bpe import load_or_build_tokenizer
@@ -355,14 +356,140 @@ def get_tinystories_dataloaders(parquet_path=None, batch_size=32, max_length=320
     return train_loader, val_loader, tokenizer
 
 
-def get_dataloaders(batch_size=32, max_length=512, dataset_type="bluesky"):
+def sample_parquet_texts(parquet_path, max_texts, batch_size=20000, seed=42):
+    """
+    Read up to max_texts rows of a corpus without materialising all of it.
+
+    pandas.read_parquet holds the Arrow buffers and the Python strings it decodes
+    them into at the same time. On the full Gutenberg corpus that is ~44 GB before a
+    single token is encoded, and with the token array on top the process is OOM-killed
+    on a 96 GB machine. Streaming row batches keeps only the rows actually retained,
+    so peak memory follows max_texts rather than the size of the file.
+
+    Rows are sampled across the whole file rather than taken from the front: the
+    corpus is ordered by book, so the first N chunks are the first few hundred books
+    rather than a cross-section of the corpus.
+
+    Args:
+        parquet_path (str): Corpus to read, with a `text` column
+        max_texts (int): Rows to keep; 0 or negative keeps all of them
+        batch_size (int): Rows decoded per batch
+        seed (int): Seed for the sampling draw
+
+    Returns:
+        list of str: At most max_texts texts
+    """
+    reader = pq.ParquetFile(parquet_path)
+    total = reader.metadata.num_rows
+    keep_all = max_texts is None or max_texts <= 0 or max_texts >= total
+    target = total if keep_all else max_texts
+
+    if not keep_all:
+        print(f"  sampling {target:,} of {total:,} chunks "
+              f"({100 * target / total:.0f}%); pass --max_texts 0 for all")
+
+    rng = np.random.default_rng(seed)
+    # Draw slightly above the target rate so a short draw still fills the quota
+    probability = 1.0 if keep_all else min(1.0, 1.05 * target / total)
+
+    texts = []
+    for batch in reader.iter_batches(batch_size=batch_size, columns=['text']):
+        rows = batch.column('text').to_pylist()
+        if probability >= 1.0:
+            texts.extend(rows)
+        else:
+            keep = rng.random(len(rows)) < probability
+            texts.extend([t for t, k in zip(rows, keep) if k])
+        if len(texts) >= target:
+            break
+
+    return texts[:target]
+
+
+GUTENBERG_TEXT_NAME = 'gutenberg_text.parquet'
+GUTENBERG_RAW_NAME = 'gutenberg_books.parquet'
+
+# The full corpus is ~5B tokens. TransformerDataset pre-tokenizes every text into
+# one contiguous int32 tensor, so loading all of it would want ~20 GB of RAM before
+# training starts. Sample down to something that fits and say so.
+GUTENBERG_DEFAULT_MAX_TEXTS = 500000
+
+
+def get_gutenberg_dataloaders(parquet_path=None, batch_size=32, max_length=512,
+                              val_split=0.1, tokenizer_type="byte-level-bpe",
+                              max_texts=None):
+    """
+    Build dataloaders over the Project Gutenberg corpus.
+
+    Args:
+        parquet_path (str, optional): Parquet to load. Prefers the postprocessed
+            corpus at data/gutenberg_text.parquet when None.
+        batch_size (int): Batch size for training
+        max_length (int): Maximum sequence length
+        val_split (float): Fraction held out for validation
+        tokenizer_type (str): Type of tokenizer to use
+        max_texts (int, optional): Keep at most this many chunks. Defaults to
+            GUTENBERG_DEFAULT_MAX_TEXTS; pass 0 or a negative number for all of them.
+
+    Returns:
+        tuple: (train_loader, val_loader, tokenizer)
+
+    Raises:
+        FileNotFoundError: If no Gutenberg corpus is present
+    """
+    if parquet_path is None:
+        if (data_dir() / GUTENBERG_TEXT_NAME).exists():
+            parquet_path = str(data_dir() / GUTENBERG_TEXT_NAME)
+        elif (data_dir() / GUTENBERG_RAW_NAME).exists():
+            parquet_path = str(data_dir() / GUTENBERG_RAW_NAME)
+            print("  WARNING: using the raw download. Run t2-postprocess gutenberg to")
+            print("  strip the Gutenberg boilerplate and chunk the books first.")
+        else:
+            raise FileNotFoundError(
+                "No Gutenberg corpus found. Collect and postprocess it first:\n"
+                "    t2-collect --dataset gutenberg\n"
+                "    t2-postprocess gutenberg --max_tokens <your --max_length>"
+            )
+
+    if max_texts is None:
+        max_texts = GUTENBERG_DEFAULT_MAX_TEXTS
+
+    print(f"Loading Project Gutenberg from {parquet_path}")
+    texts = sample_parquet_texts(parquet_path, max_texts)
+    print(f"Loaded {len(texts):,} chunks")
+
+    # Shuffle before splitting: the corpus is ordered by book, so an unshuffled
+    # split would hold out whole authors rather than a representative sample.
+    rng = np.random.default_rng(42)
+    texts = [texts[i] for i in rng.permutation(len(texts))]
+
+    tokenizer = load_or_build_tokenizer('gutenberg', texts)
+
+    num_val = int(len(texts) * val_split)
+    train_texts, val_texts = texts[num_val:], texts[:num_val]
+    print(f"Training on {len(train_texts):,} samples, validating on {len(val_texts):,}")
+
+    train_dataset = TransformerDataset(train_texts, tokenizer, max_length)
+    val_dataset = TransformerDataset(val_texts, tokenizer, max_length)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False,
+                            num_workers=4, pin_memory=True, persistent_workers=True)
+    return train_loader, val_loader, tokenizer
+
+
+def get_dataloaders(batch_size=32, max_length=512, dataset_type="bluesky",
+                    max_texts=None):
     """
     Get dataloaders for training.
 
     Args:
         batch_size (int): Batch size for training
         max_length (int): Maximum sequence length
-        dataset_type (str): One of 'bluesky', 'reddit', 'tinystories'
+        dataset_type (str): One of 'bluesky', 'reddit', 'tinystories', 'gutenberg'
+        max_texts (int, optional): Cap on the number of texts loaded. Only the
+            Gutenberg corpus is large enough to need one; ignored elsewhere.
 
     Returns:
         tuple: (train_loader, val_loader, tokenizer)
@@ -376,8 +503,11 @@ def get_dataloaders(batch_size=32, max_length=512, dataset_type="bluesky"):
         return get_reddit_dataloaders(batch_size=batch_size, max_length=max_length)
     if dataset_type == "bluesky":
         return get_bluesky_dataloaders(batch_size=batch_size, max_length=max_length)
+    if dataset_type == "gutenberg":
+        return get_gutenberg_dataloaders(batch_size=batch_size, max_length=max_length,
+                                         max_texts=max_texts)
 
     raise ValueError(
         f"Unsupported dataset_type {dataset_type!r}. "
-        f"Choose one of: bluesky, reddit, tinystories."
+        f"Choose one of: bluesky, reddit, tinystories, gutenberg."
     )

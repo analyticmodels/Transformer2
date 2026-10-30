@@ -11,6 +11,7 @@ Usage:
     
     # For Reddit training (credentials come from .env; see .env.example):
     t2-demo --dataset reddit
+    t2-demo --dataset gutenberg --max_books 200
 """
 
 import argparse
@@ -27,6 +28,8 @@ def check_data_exists(dataset_type):
         return (data_dir() / 'bluesky_posts.parquet').exists()
     elif dataset_type == 'reddit':
         return (data_dir() / 'reddit_posts.parquet').exists()
+    elif dataset_type == 'gutenberg':
+        return (data_dir() / 'gutenberg_books.parquet').exists()
     else:
         return False
 
@@ -45,6 +48,12 @@ def collect_data(args):
         df = collect_data(
             dataset_type='bluesky',
             max_samples=args.max_samples
+        )
+    elif args.dataset == 'gutenberg':
+        print(f"Collecting Project Gutenberg books from the mirror...")
+        collect_data(
+            dataset_type='gutenberg',
+            max_books=args.max_books
         )
     elif args.dataset == 'reddit':
         print(f"Collecting Reddit data from {', '.join(['r/' + sub for sub in args.subreddits])}...")
@@ -122,7 +131,7 @@ def main():
     parser = argparse.ArgumentParser(description='Transformer Training Demo')
     
     # Dataset selection
-    parser.add_argument('--dataset', type=str, required=True, choices=['reddit', 'bluesky'],
+    parser.add_argument('--dataset', type=str, required=True, choices=['reddit', 'bluesky', 'gutenberg'],
                        help='Dataset to use for training')
     
     # Reddit API credentials
@@ -134,6 +143,9 @@ def main():
                         help='User agent string for Reddit API')
     
     # Reddit data collection parameters
+    parser.add_argument('--max_books', type=int, default=None,
+                        help='Maximum books to collect (for Gutenberg). All of them if '
+                             'omitted; downloads are cached, so a run can be resumed.')
     parser.add_argument('--subreddits', nargs='+', 
                         default=['AskReddit', 'explainlikeimfive', 'todayilearned', 'science'],
                         help='List of subreddits to fetch posts from (for Reddit)')

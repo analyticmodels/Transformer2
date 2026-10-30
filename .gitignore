@@ -34,3 +34,6 @@ data/*.parquet
 # Generated output
 checkpoints/
 outputs/
+
+# Cached Project Gutenberg downloads -- tens of GB, refetched on demand
+data/gutenberg_raw/

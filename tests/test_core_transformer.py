@@ -78,6 +78,104 @@ class TestForward:
             assert not torch.allclose(model(input_ids, full), model(input_ids, partial))
 
 
+class TestCausalMasking:
+    """
+    The model is a next-token predictor: labels[i] is input_ids[i+1], so a position
+    that can attend to i+1 can read its own target. Attention was bidirectional here
+    once, and training drove the loss down by exploiting that leak rather than
+    learning to predict, which generation then exposed as noise. These tests pin the
+    property down from the outside, on outputs rather than on mask internals.
+    """
+
+    def _logits(self, model, input_ids, mask=None):
+        with torch.no_grad():
+            return model(input_ids, mask)
+
+    def test_a_later_token_cannot_change_an_earlier_position(self, model):
+        model.eval()
+        ids = torch.randint(0, 64, (1, 8))
+        altered = ids.clone()
+        altered[0, 7] = (ids[0, 7] + 1) % 64
+
+        before = self._logits(model, ids)
+        after = self._logits(model, altered)
+
+        # Bit-identical, not merely close: any leak at all is the bug.
+        assert torch.equal(before[:, :7], after[:, :7])
+        assert not torch.equal(before[:, 7], after[:, 7])
+
+    def test_causality_holds_at_every_position(self, model):
+        model.eval()
+        ids = torch.randint(0, 64, (1, 8))
+        base = self._logits(model, ids)
+
+        for cut in range(1, 8):
+            altered = ids.clone()
+            altered[0, cut] = (ids[0, cut] + 1) % 64
+            assert torch.equal(base[:, :cut], self._logits(model, altered)[:, :cut]), cut
+
+    def test_causality_holds_with_a_padding_mask(self, model):
+        model.eval()
+        ids = torch.randint(0, 64, (1, 8))
+        mask = torch.ones(1, 8, dtype=torch.long)
+        altered = ids.clone()
+        altered[0, 6] = (ids[0, 6] + 1) % 64
+
+        assert torch.equal(self._logits(model, ids, mask)[:, :6],
+                           self._logits(model, altered, mask)[:, :6])
+
+    def test_trailing_padding_does_not_change_real_positions(self, model):
+        model.eval()
+        ids = torch.randint(0, 64, (1, 8))
+        mask = torch.ones(1, 8, dtype=torch.long)
+        mask[0, 5:] = 0
+
+        padded = self._logits(model, ids, mask)
+        # The same prefix with no padding at all must give identical logits
+        unpadded = self._logits(model, ids[:, :5], torch.ones(1, 5, dtype=torch.long))
+
+        assert torch.allclose(padded[:, :5], unpadded, atol=1e-6)
+
+    def test_padding_tokens_cannot_influence_real_positions(self, model):
+        model.eval()
+        ids = torch.randint(0, 64, (1, 8))
+        mask = torch.ones(1, 8, dtype=torch.long)
+        mask[0, 5:] = 0
+        altered = ids.clone()
+        altered[0, 5:] = (ids[0, 5:] + 1) % 64
+
+        assert torch.equal(self._logits(model, ids, mask)[:, :5],
+                           self._logits(model, altered, mask)[:, :5])
+
+    def test_an_all_padding_row_does_not_produce_nan(self, model):
+        model.eval()
+        ids = torch.randint(0, 64, (2, 6))
+        mask = torch.ones(2, 6, dtype=torch.long)
+        mask[1] = 0  # a row with nothing to attend to
+
+        logits = self._logits(model, ids, mask)
+
+        assert torch.isfinite(logits).all()
+
+    def test_batch_rows_are_independent(self, model):
+        model.eval()
+        ids = torch.randint(0, 64, (2, 6))
+        mask = torch.ones(2, 6, dtype=torch.long)
+        alone = self._logits(model, ids[:1], mask[:1])
+
+        assert torch.allclose(self._logits(model, ids, mask)[:1], alone, atol=1e-6)
+
+    def test_mask_is_causal_and_square(self, model):
+        prepared = model._prepare_attention_mask(torch.ones(2, 5, dtype=torch.long))
+
+        assert prepared.shape == (2, 1, 5, 5)
+        assert not prepared[0, 0, 0, 1:].any()      # position 0 sees only itself
+        assert prepared[0, 0, 4].all()              # the last sees everything
+
+    def test_no_mask_means_causal_only(self, model):
+        assert model._prepare_attention_mask(None) is None
+
+
 class TestConstructorValidation:
     def test_rejects_head_count_that_does_not_divide_d_model(self):
         with pytest.raises(AssertionError):

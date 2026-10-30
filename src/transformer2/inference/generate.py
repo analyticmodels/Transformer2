@@ -12,6 +12,9 @@ from transformer2.tokenization.bpe import create_tokenizer, read_tokenizer_meta
 # generates and then trains, for example). Inference encodes one prompt at a time and
 # forks nothing, so it gains nothing from the setting either way.
 
+DEFAULT_DATASET_TYPE = "bluesky"
+
+
 def infer_architecture(state_dict, config=None, num_heads_override=None):
     """
     Work out the architecture of a checkpoint.
@@ -113,7 +116,7 @@ def infer_architecture(state_dict, config=None, num_heads_override=None):
         'max_seq_len': max_seq_len,
     }
 
-def load_model(model_path=None, model=None, tokenizer=None, dataset_type="bluesky",
+def load_model(model_path=None, model=None, tokenizer=None, dataset_type=None,
                use_ollama=False, ollama_model="llama2", num_heads=None):
     """
     Load a transformer model from checkpoint.
@@ -122,7 +125,8 @@ def load_model(model_path=None, model=None, tokenizer=None, dataset_type="bluesk
         model_path (str): Path to the model checkpoint
         model (nn.Module, optional): Model to load weights into. If None, a new SmallTransformer will be created.
         tokenizer: Tokenizer to use. If None, a new tokenizer will be created.
-        dataset_type (str): Type of dataset the model was trained on.
+        dataset_type (str, optional): Corpus the model was trained on. Read off the
+            checkpoint when omitted.
         use_ollama (bool): Serve generation from a local Ollama model instead of a checkpoint.
         ollama_model (str): Name of the Ollama model to use when use_ollama is set.
         num_heads (int, optional): Override the attention head count recorded in the checkpoint.
@@ -145,11 +149,11 @@ def load_model(model_path=None, model=None, tokenizer=None, dataset_type="bluesk
             model = OllamaModel(model_name=ollama_model)
         return model, tokenizer
 
-    # Create tokenizer if not provided
-    if tokenizer is None:
-        tokenizer = create_tokenizer(dataset_type)
-    
-    # For local models, load the checkpoint to get model config
+    # Read the checkpoint before building the tokenizer: training records which corpus
+    # the model was trained on, so neither the caller nor the user has to know it.
+    # Defaulting to a fixed corpus instead meant every checkpoint from a different one
+    # failed the fingerprint check below and demanded a flag the checkpoint could have
+    # supplied itself.
     try:
         checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     except Exception as e:
@@ -157,6 +161,20 @@ def load_model(model_path=None, model=None, tokenizer=None, dataset_type="bluesk
 
     if 'model_state_dict' not in checkpoint:
         raise RuntimeError(f"Checkpoint {model_path} has no 'model_state_dict' entry")
+
+    if dataset_type is None:
+        recorded = (checkpoint.get('config') or {}).get('tokenizer_dataset')
+        if recorded:
+            dataset_type = recorded
+            print(f"Checkpoint was trained with the '{dataset_type}' tokenizer.")
+        else:
+            dataset_type = DEFAULT_DATASET_TYPE
+            print(f"Checkpoint records no tokenizer; assuming '{dataset_type}'. "
+                  f"Pass --dataset_type if that is wrong.")
+
+    # Create tokenizer if not provided
+    if tokenizer is None:
+        tokenizer = create_tokenizer(dataset_type)
 
     state_dict = checkpoint['model_state_dict']
 
@@ -217,7 +235,7 @@ def load_model(model_path=None, model=None, tokenizer=None, dataset_type="bluesk
 
 def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
                  top_k=50, top_p=0.9, repetition_penalty=1.2, model_path=None, debug=False,
-                 use_ollama=False, ollama_model="llama2", dataset_type="bluesky"):
+                 use_ollama=False, ollama_model="llama2", dataset_type=None):
     """
     Generate a continuation for a prompt.
 
@@ -378,7 +396,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
         print(f"Error decoding generated tokens: {e}")
         return ""
 
-def run_interactive_demo(model_path=None, dataset_type="bluesky", use_ollama=False,
+def run_interactive_demo(model_path=None, dataset_type=None, use_ollama=False,
                          ollama_model="llama2", num_heads=None):
     """
     Run an interactive demo for text generation.
@@ -437,7 +455,7 @@ def main():
     parser = argparse.ArgumentParser(description='Text generation with transformer models')
     parser.add_argument('--model_path', type=str, default=None,
                         help='Model checkpoint (default: <checkpoints>/best_model.pt)')
-    parser.add_argument('--dataset_type', type=str, default='bluesky',
+    parser.add_argument('--dataset_type', type=str, default=None,
                         help='Type of dataset the model was trained on (bluesky, reddit, imdb)')
     parser.add_argument('--use_ollama', action='store_true',
                         help='Use Ollama model instead of local transformer')

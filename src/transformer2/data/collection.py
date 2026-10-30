@@ -12,6 +12,7 @@ from transformer2.paths import data_dir
 BLUESKY_NAME = "bluesky_posts.parquet"
 TINYSTORIES_NAME = "tinystories.parquet"
 REDDIT_NAME = "reddit_posts.parquet"
+GUTENBERG_NAME = "gutenberg_books.parquet"
 
 def download_bluesky_dataset(output_path=None, max_samples=10000):
     """
@@ -294,7 +295,8 @@ def collect_data(dataset_type, output_path=None, **kwargs):
     Unified function to collect data from different sources.
     
     Args:
-        dataset_type (str): Type of dataset to collect ('reddit', 'bluesky', 'tinystories')
+        dataset_type (str): Type of dataset to collect ('reddit', 'bluesky',
+            'tinystories', 'gutenberg')
         output_path (str, optional): Path to save the dataset
         **kwargs: Additional arguments for specific data collection functions
 
@@ -315,6 +317,15 @@ def collect_data(dataset_type, output_path=None, **kwargs):
         if output_path is None:
             output_path = str(data_dir() / REDDIT_NAME)
         return collect_reddit_data(output_path=output_path, **kwargs)
+
+    elif dataset_type == 'gutenberg':
+        # Imported here rather than at module scope: collecting Gutenberg is the
+        # only path that needs the mirror machinery.
+        from transformer2.data.gutenberg import collect_gutenberg
+        if output_path is None:
+            output_path = str(data_dir() / GUTENBERG_NAME)
+        return collect_gutenberg(output_path=output_path, **kwargs)
+
     
     else:
         raise ValueError(f"Unsupported dataset type: {dataset_type}")
@@ -323,7 +334,7 @@ def main():
     parser = argparse.ArgumentParser(description='Collect training data for transformer models')
     
     # Main arguments
-    parser.add_argument('--dataset', type=str, required=True, choices=['reddit', 'bluesky', 'tinystories'],
+    parser.add_argument('--dataset', type=str, required=True, choices=['reddit', 'bluesky', 'tinystories', 'gutenberg'],
                         help='Type of dataset to collect')
     parser.add_argument('--output', type=str, default=None,
                         help='Output path for the collected data')
@@ -335,6 +346,18 @@ def main():
                         help='Maximum number of samples to include (Bluesky, TinyStories). '
                              'All of them if omitted.')
     
+    # Gutenberg arguments
+    parser.add_argument('--mirror', type=str, default=None,
+                        help='Gutenberg mirror base URL to download books from. '
+                             'gutenberg.org itself blocks bulk downloads.')
+    parser.add_argument('--max_books', type=int, default=None,
+                        help='Maximum books to collect (Gutenberg). All of them if omitted; '
+                             'downloads are cached, so a run can be resumed.')
+    parser.add_argument('--delay', type=float, default=1.0,
+                        help='Seconds between requests (Gutenberg; default: 1.0)')
+    parser.add_argument('--language', type=str, default='en',
+                        help='Catalog language to collect (Gutenberg; default: en)')
+
     # Reddit arguments
     parser.add_argument('--client_id', type=str, default=None,
                         help='Reddit API client ID. Prefer REDDIT_CLIENT_ID in .env; '
@@ -365,6 +388,16 @@ def main():
             dataset_type='bluesky',
             output_path=args.output,
             max_samples=args.max_samples
+        )
+    elif args.dataset == 'gutenberg':
+        from transformer2.data.gutenberg import DEFAULT_MIRROR
+        collect_data(
+            dataset_type='gutenberg',
+            output_path=args.output,
+            mirror=args.mirror or DEFAULT_MIRROR,
+            max_books=args.max_books,
+            delay=args.delay,
+            language=args.language
         )
     elif args.dataset == 'reddit':
         collect_data(

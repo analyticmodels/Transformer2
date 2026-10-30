@@ -155,3 +155,55 @@ class TestLoadModelVerifiesProvenance:
         model, _ = inference.load_model(path, tokenizer=self._Tok(), dataset_type='bluesky')
 
         assert model is not None
+
+
+class TestTokenizerIsReadOffTheCheckpoint:
+    """
+    Training records which corpus the tokenizer came from, so inference should not
+    need to be told. --dataset_type used to default to 'bluesky', which meant every
+    checkpoint trained on anything else refused to load until the user passed a flag
+    the checkpoint itself already carried.
+    """
+
+    class _Tok:
+        def get_vocab_size(self):
+            return 64
+
+    def _checkpoint(self, tmp_path, tokenizer_dataset):
+        model = SmallTransformer(vocab_size=64, d_model=32, num_heads=4, num_layers=1,
+                                 d_ff=16, max_seq_len=8, dropout=0.0)
+        config = {'vocab_size': 64, 'd_model': 32, 'num_heads': 4, 'num_layers': 1,
+                  'd_ff': 16, 'max_seq_len': 8}
+        if tokenizer_dataset:
+            config['tokenizer_dataset'] = tokenizer_dataset
+        path = tmp_path / 'ckpt.pt'
+        torch.save({'model_state_dict': model.state_dict(), 'config': config}, path)
+        return str(path)
+
+    def test_recorded_corpus_is_used_when_none_is_given(self, fake_tokenizer_dir,
+                                                        tmp_path, capsys):
+        fake_tokenizer_dir('gutenberg')
+        path = self._checkpoint(tmp_path, 'gutenberg')
+
+        inference.load_model(path, tokenizer=self._Tok(), dataset_type=None)
+
+        assert "'gutenberg' tokenizer" in capsys.readouterr().out
+
+    def test_an_explicit_corpus_still_wins(self, fake_tokenizer_dir, tmp_path):
+        fake_tokenizer_dir('bluesky')
+        path = self._checkpoint(tmp_path, 'gutenberg')
+
+        # No fingerprint recorded, so this loads; the point is that the caller's
+        # choice is not silently replaced by the checkpoint's.
+        model, _ = inference.load_model(path, tokenizer=self._Tok(),
+                                        dataset_type='bluesky')
+        assert model is not None
+
+    def test_a_checkpoint_without_provenance_falls_back(self, fake_tokenizer_dir,
+                                                        tmp_path, capsys):
+        fake_tokenizer_dir('bluesky')
+        path = self._checkpoint(tmp_path, None)
+
+        inference.load_model(path, tokenizer=self._Tok(), dataset_type=None)
+
+        assert "records no tokenizer" in capsys.readouterr().out

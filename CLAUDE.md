@@ -20,7 +20,10 @@ work from any directory.
 - Build a tokenizer: `.venv/bin/t2-tokenizer --dataset_type bluesky`
 - Collect data: `.venv/bin/t2-collect --dataset tinystories`
 - Postprocess: `.venv/bin/t2-postprocess tinystories --max_tokens 320`
-  (or `t2-postprocess reddit --max_tokens 512`; the two take different flags)
+  (or `t2-postprocess reddit --max_tokens 512`, `t2-postprocess gutenberg
+  --max_tokens 512`; the subcommands take different flags)
+- Collect Gutenberg: `.venv/bin/t2-collect --dataset gutenberg --max_books 20`
+  (omit `--max_books` for the whole ~62k-book English subset; it resumes)
 - Train: `.venv/bin/t2-train --dataset tinystories --max_length 320`
 - Generate: `.venv/bin/t2-generate --prompt "Your prompt here"`
 - Tune sampling: `.venv/bin/t2-tune --prompt "..."` -> `outputs/inference_params.json`
@@ -75,6 +78,34 @@ These encode past bugs; the test suite guards each one.
   Training reads `data/reddit_text.parquet` when present and warns when it does not.
 - **Token counts are not additive across concatenation.** The separator costs tokens
   and BPE merges across the join, so packed chunks must be re-measured, not summed.
+- **Gutenberg is streamed, never loaded whole.** The English subset is ~24 GB of
+  plain text and ~5B tokens (measured, not estimated; the 1-2 TB figure quoted for
+  Gutenberg is the complete all-format mirror, not this subset). Collection flushes parquet row groups as books arrive, postprocessing
+  reads back with `iter_batches`, deduplication keeps digests rather than rows,
+  and the tokenizer branch stops at `GUTENBERG_TOKENIZER_ROWS`. `pd.read_parquet`
+  on the whole corpus, or `drop_duplicates` over it, exhausts memory.
+- **Gutenberg chunks one book at a time.** `chunk_segments` is called per book so
+  a chunk never runs from the end of one work into the start of another, the same
+  rule TinyStories applies per story. Books with no recognisable Gutenberg
+  markers are skipped, so the license text never enters the corpus.
+- **Gutenberg downloads come from a mirror, not gutenberg.org**, which blocks
+  bulk crawling. Raw books are cached under `data/gutenberg_raw/` so a run that
+  takes a day is resumable; never remove that cache check.
+- **The Gutenberg corpus is sampled at read time, not after loading.** Reading it
+  with `pd.read_parquet` holds the Arrow buffers and the decoded Python strings at
+  once -- ~44 GB before tokenizing -- and `t2-train --max_texts 0` was OOM-killed at
+  82 GB RSS on a 96 GB machine. `sample_parquet_texts` streams row batches so peak
+  memory follows `--max_texts` (~5.5 GB per million chunks), not the file size.
+- **Attention must stay causal.** `labels[i]` is `input_ids[i+1]`, so a position that
+  can attend to `i+1` reads its own target. Attention here was bidirectional once (a
+  `[B,1,1,S]` padding mask under a comment claiming to build a causal one), which lets
+  training drive the loss down without learning to predict. `_prepare_attention_mask`
+  now folds causal and padding masking into one bool `[B,1,S,S]` mask, and
+  `TestCausalMasking` in `tests/test_core_transformer.py` asserts bit-identical logits
+  at every earlier position when a later token changes.
+- **Attention goes through `F.scaled_dot_product_attention`.** The hand-rolled version
+  materialised `[B, num_heads, S, S]`, which was the memory ceiling. Do not reintroduce
+  an explicit `softmax(QK^T)`; dropout belongs in `dropout_p`, inside the fused kernel.
 - **Ollama is inference-only** — no parameters, no gradients. `t2-train --use_ollama`
   must keep failing loudly.
 

@@ -149,10 +149,10 @@ class TestCurriculumLength:
 
 @requires_cuda
 class TestTrainingLoop:
-    def test_runs_and_returns_loss_history(self, model, loaders):
+    def test_runs_and_returns_loss_history(self, model, loaders, tmp_path):
         trained, train_losses, val_losses = training.train_model(
             model, *loaders, num_epochs=2, accumulation_steps=2, checkpoint_freq=100,
-            checkpoint_path='/dev/null')
+            checkpoint_path=str(tmp_path / 'best.pt'))
 
         assert len(train_losses) == 2 and len(val_losses) == 2
         assert all(torch.isfinite(torch.tensor(l)) for l in train_losses)
@@ -215,6 +215,86 @@ class TestTrainingLoop:
         with pytest.raises(RuntimeError, match="boom"):
             training.train_model(model, *loaders, num_epochs=1, accumulation_steps=2,
                                  checkpoint_path=str(tmp_path / 'x.pt'), checkpoint_freq=100)
+
+
+@requires_cuda
+class TestResume:
+    def run(self, model, loaders, path, epochs, **kwargs):
+        return training.train_model(model, *loaders, num_epochs=epochs, accumulation_steps=2,
+                                    checkpoint_path=str(path), checkpoint_freq=100, **kwargs)
+
+    def fresh_model(self):
+        return SmallTransformer(vocab_size=32, d_model=16, num_heads=2, num_layers=2,
+                                d_ff=32, max_seq_len=8, dropout=0.1)
+
+    def test_writes_a_resume_checkpoint_every_epoch(self, model, loaders, tmp_path):
+        self.run(model, loaders, tmp_path / 'best.pt', 2)
+
+        state = torch.load(tmp_path / 'last_checkpoint.pt', weights_only=False)
+        assert state['epoch'] == 1 and len(state['val_losses']) == 2
+        assert 'best_val_loss' in state['trainer_state']
+        assert not list(tmp_path.glob('*.partial'))
+
+    @pytest.mark.parametrize("use_curriculum", [False, True])
+    def test_resumes_after_the_saved_epoch(self, model, loaders, tmp_path, monkeypatch,
+                                           use_curriculum):
+        """Interrupt a 3-epoch run after epoch 1, then finish it from last_checkpoint.pt."""
+        best = tmp_path / 'best.pt'
+        real_save = training.save_checkpoint
+
+        def interrupt_after_first_epoch(path, *args, **kwargs):
+            real_save(path, *args, **kwargs)
+            if path.endswith('last_checkpoint.pt'):
+                raise KeyboardInterrupt
+
+        monkeypatch.setattr(training, 'save_checkpoint', interrupt_after_first_epoch)
+        self.run(model, loaders, best, 3, use_curriculum=use_curriculum)
+        monkeypatch.setattr(training, 'save_checkpoint', real_save)
+        assert torch.load(tmp_path / 'last_checkpoint.pt', weights_only=False)['epoch'] == 0
+
+        _, train_losses, val_losses = self.run(
+            self.fresh_model(), loaders, best, 3, use_curriculum=use_curriculum,
+            resume_from=str(tmp_path / 'last_checkpoint.pt'))
+
+        assert len(train_losses) == 3 and len(val_losses) == 3
+        assert torch.load(tmp_path / 'last_checkpoint.pt', weights_only=False)['epoch'] == 2
+
+    def test_restores_weights_exactly(self, model, loaders, tmp_path):
+        self.run(model, loaders, tmp_path / 'best.pt', 1)
+        saved = torch.load(tmp_path / 'last_checkpoint.pt', weights_only=False)
+
+        resumed = self.fresh_model()
+        self.run(resumed, loaders, tmp_path / 'other.pt', 1,
+                 resume_from=str(tmp_path / 'last_checkpoint.pt'))
+
+        # Epoch count already satisfied, so nothing trained: weights are the checkpoint's.
+        for name, value in resumed.state_dict().items():
+            assert torch.equal(value.cpu(), saved['model_state_dict'][name].cpu())
+
+    def test_refuses_a_checkpoint_from_a_different_architecture(self, model, loaders, tmp_path):
+        self.run(model, loaders, tmp_path / 'best.pt', 1)
+        wider = SmallTransformer(vocab_size=32, d_model=32, num_heads=2, num_layers=2,
+                                 d_ff=32, max_seq_len=8, dropout=0.1)
+
+        with pytest.raises(ValueError, match="d_model"):
+            self.run(wider, loaders, tmp_path / 'best.pt', 2,
+                     resume_from=str(tmp_path / 'last_checkpoint.pt'))
+
+
+class TestResolveResume:
+    def test_none_means_fresh(self, tmp_path):
+        assert training.resolve_resume(None, str(tmp_path)) is None
+
+    def test_auto_starts_fresh_when_nothing_was_saved(self, tmp_path):
+        assert training.resolve_resume('auto', str(tmp_path)) is None
+
+    def test_auto_finds_the_last_checkpoint(self, tmp_path):
+        (tmp_path / 'last_checkpoint.pt').write_bytes(b'x')
+        assert training.resolve_resume('auto', str(tmp_path)) == str(tmp_path / 'last_checkpoint.pt')
+
+    def test_explicit_missing_path_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            training.resolve_resume(str(tmp_path / 'nope.pt'), str(tmp_path))
 
 
 class TestCommandLine:

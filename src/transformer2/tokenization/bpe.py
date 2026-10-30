@@ -14,6 +14,11 @@ from transformer2.paths import ensure, tokenizer_dir
 
 
 SPECIAL_TOKENS = ["<s>", "</s>", "<pad>", "<unk>"]
+# Text sampled from the Gutenberg corpus to train its tokenizer. Capped in bytes
+# rather than rows because a row is a whole book before postprocessing and a chunk
+# after it -- a row cap large enough for chunks writes the entire 22 GB corpus when
+# handed books. 2 GB is far more than a 50k vocabulary needs.
+GUTENBERG_TOKENIZER_BYTES = 2_000_000_000
 META_NAME = "meta.json"
 
 
@@ -282,6 +287,40 @@ def train_byte_level_tokenizer(dataset_type, vocab_size=50000, min_frequency=2):
                 "    t2-collect --dataset tinystories"
             )
 
+    elif dataset_type == "gutenberg":
+        # The whole corpus would be ~18 GB of training_data.txt, so stream it and
+        # stop at a row cap -- far more text than a 50k vocabulary needs. Paths go
+        # through data_dir() rather than the relative strings the branches above
+        # use, which only resolve when the process runs from the project root.
+        import pyarrow.parquet as pq
+        from transformer2.paths import data_dir
+
+        for name in ("gutenberg_text.parquet", "gutenberg_books.parquet"):
+            candidate = data_dir() / name
+            if candidate.exists():
+                print(f"Loading Project Gutenberg data from {candidate}")
+                written = num_bytes = 0
+                reader = pq.ParquetFile(str(candidate))
+                with open(training_data_path, "w", encoding="utf-8") as f:
+                    for batch in reader.iter_batches(batch_size=200, columns=["text"]):
+                        for text in batch.column("text").to_pylist():
+                            if not text or not text.strip():
+                                continue
+                            line = text.replace("\n", " ") + "\n"
+                            f.write(line)
+                            written += 1
+                            num_bytes += len(line)
+                        if num_bytes >= GUTENBERG_TOKENIZER_BYTES:
+                            break
+                print(f"Saved {written:,} rows ({num_bytes / 1e9:.1f} GB) "
+                      f"to {training_data_path}")
+                break
+        else:
+            raise FileNotFoundError(
+                "No Gutenberg corpus found. Collect it first:\n"
+                "    t2-collect --dataset gutenberg"
+            )
+
     elif dataset_type == "wikitext":
         dataset = load_dataset("wikitext", "wikitext-103-v1", split="train")
         text_field = "text"
@@ -433,7 +472,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Prepare tokenizer for transformer model")
     parser.add_argument('--dataset_type', type=str, default='bluesky',
-                        choices=['bluesky', 'reddit', 'wikitext', 'tinystories'],
+                        choices=['bluesky', 'reddit', 'wikitext', 'tinystories', 'gutenberg'],
                         help='Dataset to build the tokenizer from')
     parser.add_argument('--vocab_size', type=int, default=50000,
                         help='Vocabulary size for the tokenizer')

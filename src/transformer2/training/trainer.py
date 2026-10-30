@@ -6,6 +6,7 @@ from tqdm import tqdm
 import torch.cuda.amp as amp
 import os
 import argparse
+import signal
 
 from transformer2.paths import checkpoint_dir, tokenizer_dir
 
@@ -78,7 +79,7 @@ def model_config(model):
     return config
 
 def save_checkpoint(path, epoch, model, optimizer, scheduler, scaler, loss,
-                    train_losses, val_losses, extra_config=None):
+                    train_losses, val_losses, extra_config=None, trainer_state=None):
     """
     Write a training checkpoint.
 
@@ -89,11 +90,16 @@ def save_checkpoint(path, epoch, model, optimizer, scheduler, scaler, loss,
         loss: Validation loss associated with this checkpoint
         train_losses, val_losses: Loss history so far
         extra_config: Training settings to record alongside the architecture
+        trainer_state: Loop state needed to resume (best loss, patience counter)
+
+    The file is written beside `path` and renamed into place, so a process killed
+    mid-write (a spot reclaim) leaves the previous checkpoint intact, not a torn one.
     """
     config = model_config(model)
     if extra_config:
         config.update(extra_config)
 
+    partial = f'{path}.partial'
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -104,7 +110,9 @@ def save_checkpoint(path, epoch, model, optimizer, scheduler, scaler, loss,
         'val_losses': val_losses,
         'scaler_state_dict': scaler.state_dict(),
         'config': config,
-    }, path, pickle_protocol=5, _use_new_zipfile_serialization=True)
+        'trainer_state': trainer_state or {},
+    }, partial, pickle_protocol=5, _use_new_zipfile_serialization=True)
+    os.replace(partial, path)
 
 def sibling_checkpoint(checkpoint_path, name):
     """
@@ -124,10 +132,69 @@ def sibling_checkpoint(checkpoint_path, name):
     return os.path.join(os.path.dirname(checkpoint_path), name)
 
 
+LAST_CHECKPOINT = 'last_checkpoint.pt'
+
+
+def resolve_resume(resume, output_dir):
+    """
+    Turn the --resume argument into a checkpoint path, or None to start fresh.
+
+    Args:
+        resume (str or None): None, 'auto', or an explicit checkpoint path
+        output_dir (str): Directory the run writes checkpoints to
+
+    Returns:
+        str or None: 'auto' resolves to <output_dir>/last_checkpoint.pt when it exists
+            (so one launch script serves both the first start and every restart after
+            an interruption). An explicit path that is missing raises.
+    """
+    if resume is None:
+        return None
+    if resume == 'auto':
+        candidate = os.path.join(output_dir, LAST_CHECKPOINT)
+        return candidate if os.path.isfile(candidate) else None
+    if not os.path.isfile(resume):
+        raise FileNotFoundError(f"--resume checkpoint not found: {resume}")
+    return resume
+
+
+def restore_checkpoint(path, model, optimizer, scheduler, scaler, training_config, device):
+    """
+    Load a training checkpoint into live training objects.
+
+    Refuses a checkpoint whose architecture, tokenizer or optimizer/schedule setup
+    differs from the current run: a mismatch would load or schedule silently wrong.
+
+    Returns:
+        dict: epoch, train_losses, val_losses, best_val_loss, patience_counter
+    """
+    state = torch.load(path, map_location=device, weights_only=False)
+    saved = state.get('config', {})
+
+    for key, value in {**model_config(model), **training_config}.items():
+        if key in saved and saved[key] != value:
+            raise ValueError(
+                f"Cannot resume from {path}: {key} was {saved[key]!r} in the "
+                f"checkpoint but is {value!r} in this run")
+
+    model.load_state_dict(state['model_state_dict'])
+    optimizer.load_state_dict(state['optimizer_state_dict'])
+    scheduler.load_state_dict(state['scheduler_state_dict'])
+    scaler.load_state_dict(state['scaler_state_dict'])
+    trainer_state = state.get('trainer_state', {})
+    return {
+        'epoch': state['epoch'],
+        'train_losses': list(state['train_losses']),
+        'val_losses': list(state['val_losses']),
+        'best_val_loss': trainer_state.get('best_val_loss', float('inf')),
+        'patience_counter': trainer_state.get('patience_counter', 0),
+    }
+
+
 def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
                 accumulation_steps=16, max_grad_norm=0.5, use_curriculum=False,
                 checkpoint_path='best_model.pt', checkpoint_freq=5, optimizer_type='adamw',
-                tokenizer_meta=None):
+                tokenizer_meta=None, resume_from=None):
     """
     Train a transformer model with optional curriculum learning.
 
@@ -144,6 +211,9 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
         checkpoint_freq: Frequency (in epochs) to save checkpoints
         tokenizer_meta: Provenance of the tokenizer, recorded in the checkpoint
         optimizer_type: One of 'adam', 'adamw' or 'sgd'
+        resume_from: Checkpoint written by a previous run (see resolve_resume). Training
+            continues from the epoch after it. The checkpoint is written at the end of
+            every epoch, so an interruption costs at most the epoch in progress.
 
     Returns:
         tuple: (trained model, training losses, validation losses)
@@ -252,13 +322,25 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
             'tokenizer_vocab_sha256': tokenizer_meta.get('vocab_sha256'),
         })
 
+    start_epoch = 0
+    if resume_from:
+        restored = restore_checkpoint(resume_from, model, optimizer, scheduler, scaler,
+                                      training_config, device)
+        start_epoch = restored['epoch'] + 1
+        train_losses, val_losses = restored['train_losses'], restored['val_losses']
+        best_val_loss = restored['best_val_loss']
+        patience_counter = restored['patience_counter']
+        print(f"Resumed from {resume_from}: continuing at epoch {start_epoch + 1}/{num_epochs}")
+        if start_epoch >= num_epochs:
+            print("Nothing to do: the checkpoint already covers every requested epoch")
+
     print(f"Starting training on {device} with {'curriculum' if use_curriculum else 'standard'} learning")
     print(f"Number of batches: {len(train_loader)}")
     print(f"Accumulation steps: {accumulation_steps}")
     print(f"Effective batch size: {train_loader.batch_size * accumulation_steps}")
     
     try:
-        for epoch in range(num_epochs):
+        for epoch in range(start_epoch, num_epochs):
             model.train()
             total_loss = 0
             optimizer.zero_grad()
@@ -366,9 +448,18 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
                 )
             else:
                 patience_counter += 1
-                if patience_counter >= patience:
-                    print(f'Early stopping triggered after {epoch+1} epochs')
-                    break
+
+            # Resume point, written every epoch (and before any early-stop break)
+            save_checkpoint(
+                sibling_checkpoint(checkpoint_path, LAST_CHECKPOINT), epoch, model, optimizer,
+                scheduler, scaler, avg_val_loss, train_losses, val_losses, training_config,
+                trainer_state={'best_val_loss': best_val_loss,
+                               'patience_counter': patience_counter},
+            )
+
+            if patience_counter >= patience:
+                print(f'Early stopping triggered after {epoch+1} epochs')
+                break
             
             # Save checkpoint at regular intervals
             if (epoch + 1) % checkpoint_freq == 0:
@@ -402,8 +493,11 @@ def train_model(model, train_loader, val_loader, num_epochs=50, patience=5,
 def main():
     """Main function to run training from the command line."""
     parser = argparse.ArgumentParser(description='Train transformer model on text data')
-    parser.add_argument('--dataset', type=str, default='reddit', choices=['reddit', 'bluesky', 'tinystories'],
+    parser.add_argument('--dataset', type=str, default='reddit', choices=['reddit', 'bluesky', 'tinystories', 'gutenberg'],
                         help='Dataset to use for training (default: reddit)')
+    parser.add_argument('--max_texts', type=int, default=None,
+                        help='Cap on texts loaded from the corpus. Only Gutenberg is '
+                             'large enough to need one; 0 loads all of it.')
     parser.add_argument('--batch_size', type=int, default=8,
                         help='Batch size for training (default: 8)')
     parser.add_argument('--epochs', type=int, default=30,
@@ -420,6 +514,10 @@ def main():
                         help='Use curriculum learning (gradually increase sequence length)')
     parser.add_argument('--output_dir', type=str, default=None,
                         help='Directory for checkpoints (default: <checkpoints>/)')
+    parser.add_argument('--resume', type=str, default=None, metavar='PATH|auto',
+                        help="Continue from a checkpoint. 'auto' uses "
+                             "<output_dir>/last_checkpoint.pt if present and otherwise "
+                             "starts fresh, so one command serves every restart.")
     parser.add_argument('--use_ollama', action='store_true',
                         help='Not supported for training; use inference.py --use_ollama instead')
     # Model training parameters
@@ -447,6 +545,13 @@ def main():
 
     args.output_dir = str(args.output_dir or checkpoint_dir())
     os.makedirs(args.output_dir, exist_ok=True)
+    resume_from = resolve_resume(args.resume, args.output_dir)
+
+    # A spot reclaim sends SIGTERM. Route it through the KeyboardInterrupt path so the
+    # process exits cleanly and writes interrupted_checkpoint.pt instead of dying mid-step.
+    def raise_interrupt(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, raise_interrupt)
 
     print(f"Training on {args.dataset} dataset")
     print(f"Model: d_model={args.d_model}, num_heads={args.num_heads}, "
@@ -463,7 +568,8 @@ def main():
     train_loader, val_loader, tokenizer = get_dataloaders(
         batch_size=args.batch_size,
         max_length=args.max_length,
-        dataset_type=args.dataset
+        dataset_type=args.dataset,
+        max_texts=args.max_texts
     )
 
     # Create model
@@ -491,6 +597,7 @@ def main():
         checkpoint_path=checkpoint_path,
         optimizer_type=args.optimizer,
         tokenizer_meta=read_tokenizer_meta(tokenizer_dir(args.dataset)),
+        resume_from=resume_from,
     )
 
     print(f"\nTraining completed. Best model saved to {checkpoint_path}")
