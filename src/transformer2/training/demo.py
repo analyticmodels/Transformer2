@@ -7,10 +7,11 @@ This script demonstrates the complete workflow for:
 
 Usage:
     # For Bluesky training:
-    python train_demo.py --dataset bluesky
+    t2-demo --dataset bluesky
     
-    # For Reddit training:
-    python train_demo.py --dataset reddit --client_id YOUR_REDDIT_CLIENT_ID --client_secret YOUR_REDDIT_CLIENT_SECRET
+    # For Reddit training (credentials come from .env; see .env.example):
+    t2-demo --dataset reddit
+    t2-demo --dataset gutenberg --max_books 200
 """
 
 import argparse
@@ -18,12 +19,17 @@ import os
 import sys
 import time
 
+from transformer2.config import reddit_credentials
+from transformer2.paths import data_dir
+
 def check_data_exists(dataset_type):
     """Check if the data file exists for the specified dataset type."""
     if dataset_type == 'bluesky':
-        return os.path.exists('data/bluesky_posts.parquet')
+        return (data_dir() / 'bluesky_posts.parquet').exists()
     elif dataset_type == 'reddit':
-        return os.path.exists('data/reddit_posts.parquet')
+        return (data_dir() / 'reddit_posts.parquet').exists()
+    elif dataset_type == 'gutenberg':
+        return (data_dir() / 'gutenberg_books.parquet').exists()
     else:
         return False
 
@@ -34,7 +40,7 @@ def collect_data(args):
     print("="*80)
     
     # Import the data collection function
-    from data_collection import collect_data
+    from transformer2.data.collection import collect_data
     
     # Collect data based on dataset type
     if args.dataset == 'bluesky':
@@ -42,6 +48,12 @@ def collect_data(args):
         df = collect_data(
             dataset_type='bluesky',
             max_samples=args.max_samples
+        )
+    elif args.dataset == 'gutenberg':
+        print(f"Collecting Project Gutenberg books from the mirror...")
+        collect_data(
+            dataset_type='gutenberg',
+            max_books=args.max_books
         )
     elif args.dataset == 'reddit':
         print(f"Collecting Reddit data from {', '.join(['r/' + sub for sub in args.subreddits])}...")
@@ -81,7 +93,7 @@ def train_model(args):
     print(f"Optimizer: {args.optimizer.upper()}")
     
     # Import the training function
-    from training import train_model, main as training_main
+    from transformer2.training.trainer import train_model, main as training_main
     
     # Set command-line arguments for training
     sys.argv = [
@@ -119,16 +131,21 @@ def main():
     parser = argparse.ArgumentParser(description='Transformer Training Demo')
     
     # Dataset selection
-    parser.add_argument('--dataset', type=str, required=True, choices=['reddit', 'bluesky'],
+    parser.add_argument('--dataset', type=str, required=True, choices=['reddit', 'bluesky', 'gutenberg'],
                        help='Dataset to use for training')
     
     # Reddit API credentials
-    parser.add_argument('--client_id', help='Reddit API client ID (required for Reddit)')
-    parser.add_argument('--client_secret', help='Reddit API client secret (required for Reddit)')
+    parser.add_argument('--client_id', help='Reddit API client ID. Prefer REDDIT_CLIENT_ID '
+                                            'in .env; command-line secrets leak into shell history')
+    parser.add_argument('--client_secret', help='Reddit API client secret. Prefer '
+                                                'REDDIT_CLIENT_SECRET in .env')
     parser.add_argument('--user_agent', default='python:transformer-training:v1.0', 
                         help='User agent string for Reddit API')
     
     # Reddit data collection parameters
+    parser.add_argument('--max_books', type=int, default=None,
+                        help='Maximum books to collect (for Gutenberg). All of them if '
+                             'omitted; downloads are cached, so a run can be resumed.')
     parser.add_argument('--subreddits', nargs='+', 
                         default=['AskReddit', 'explainlikeimfive', 'todayilearned', 'science'],
                         help='List of subreddits to fetch posts from (for Reddit)')
@@ -173,10 +190,19 @@ def main():
     
     args = parser.parse_args()
     
-    # Validate arguments
-    if args.dataset == 'reddit' and (not args.client_id or not args.client_secret) and not args.skip_data_collection:
-        if not check_data_exists('reddit'):
-            parser.error("Reddit data collection requires --client_id and --client_secret")
+    # Validate arguments. Credentials may come from .env rather than the command line,
+    # so resolve them before deciding whether collection is possible.
+    if args.dataset == 'reddit' and not args.skip_data_collection:
+        client_id, client_secret, _ = reddit_credentials(
+            client_id=args.client_id, client_secret=args.client_secret
+        )
+        if not client_id or not client_secret:
+            if not check_data_exists('reddit'):
+                parser.error(
+                    "Reddit data collection requires credentials. Set REDDIT_CLIENT_ID and "
+                    "REDDIT_CLIENT_SECRET in .env (see .env.example), or pass "
+                    "--client_id/--client_secret."
+                )
     
     print("\n" + "="*80)
     print(f"Transformer Training Demo: {args.dataset.capitalize()} Dataset")
@@ -197,7 +223,7 @@ def main():
     print("DEMO COMPLETED SUCCESSFULLY")
     print("="*80)
     print("\nYou can now use the trained model for inference with:")
-    print("python inference.py --prompt \"Your prompt here\"")
+    print("t2-generate --prompt \"Your prompt here\"")
 
 if __name__ == "__main__":
     main()

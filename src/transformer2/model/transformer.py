@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class MultiHeadAttention(nn.Module):
     """Multi-head self-attention mechanism with separate projections for Q, K, V.
@@ -19,7 +20,6 @@ class MultiHeadAttention(nn.Module):
         self.d_model = d_model
         self.num_heads = num_heads
         self.head_dim = d_model // num_heads
-        self.scale = math.sqrt(self.head_dim)
         
         # Single initialization for all projection layers
         self.q_proj = nn.Linear(d_model, d_model)
@@ -43,30 +43,37 @@ class MultiHeadAttention(nn.Module):
         """
         Args:
             x (torch.Tensor): Input tensor of shape [batch_size, seq_len, d_model]
-            attention_mask (torch.Tensor, optional): Attention mask of shape [batch_size, seq_len]
-        
+            attention_mask (torch.Tensor, optional): Combined causal/padding mask from
+                SmallTransformer._prepare_attention_mask, shaped
+                [batch_size, 1, seq_len, seq_len] and True where a query position may
+                attend to a key position. None means causal-only, which takes the
+                faster fused kernel.
+
         Returns:
             torch.Tensor: Output tensor of shape [batch_size, seq_len, d_model]
         """
         B, S, D = x.shape
-        
-        # Separate Q, K, V projections
+
         q = self.q_proj(x).view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
-        
-        # Scaled dot-product attention
-        scores = torch.matmul(q, k.transpose(-2, -1)) / self.scale
-        
-        if attention_mask is not None:
-            scores = scores + attention_mask
-        
-        attn = torch.softmax(scores, dim=-1)
-        attn = self.dropout(attn)
-        
-        context = torch.matmul(attn, v)
+
+        # scaled_dot_product_attention scales by 1/sqrt(head_dim) internally and never
+        # materialises the [B, num_heads, S, S] score matrix, which was the memory
+        # ceiling on long sequences. Dropout is passed as a probability rather than
+        # applied afterwards because it belongs on the attention weights, inside the
+        # fused kernel.
+        dropout_p = self.dropout.p if self.training else 0.0
+
+        if attention_mask is None:
+            context = F.scaled_dot_product_attention(
+                q, k, v, dropout_p=dropout_p, is_causal=True)
+        else:
+            context = F.scaled_dot_product_attention(
+                q, k, v, attn_mask=attention_mask, dropout_p=dropout_p)
+
         context = context.transpose(1, 2).contiguous().view(B, S, D)
-        
+
         return self.out_proj(context)
 
 class TransformerBlock(nn.Module):
@@ -211,24 +218,38 @@ class SmallTransformer(nn.Module):
     
     def _prepare_attention_mask(self, attention_mask):
         """
-        Prepares attention mask for the transformer.
-        
+        Combine padding and causal masking into one boolean mask.
+
+        The causal half is the point of this method: without it a position attends to
+        the token that is its own next-token label, so the model learns to read the
+        answer rather than predict it and generation collapses to noise. The padding
+        mask is folded into the same tensor so attention needs only one.
+
+        Returns None when there is no padding mask to honour, which lets attention take
+        scaled_dot_product_attention's fused causal path.
+
         Args:
-            attention_mask (torch.Tensor): Attention mask of shape [batch_size, seq_len]
-            
+            attention_mask (torch.Tensor): Mask of shape [batch_size, seq_len], 1 to
+                keep and 0 for padding
+
         Returns:
-            torch.Tensor: Attention mask of shape [batch_size, 1, 1, seq_len]
+            torch.Tensor or None: Bool mask of shape [batch_size, 1, seq_len, seq_len],
+                True where a query position may attend to a key position
         """
         if attention_mask is None:
             return None
-            
-        # Create causal attention mask
-        batch_size, seq_len = attention_mask.size()
-        
-        # Convert mask of [1,1,1,0,0] (where 1 is keep, 0 is mask) to attn format 
-        # where -inf is masked positions
-        attention_mask = (1.0 - attention_mask.unsqueeze(1).unsqueeze(2)) * -10000.0
-        return attention_mask
+
+        seq_len = attention_mask.size(1)
+        device = attention_mask.device
+
+        causal = torch.ones((seq_len, seq_len), dtype=torch.bool, device=device).tril_()
+        keep = attention_mask[:, None, None, :].bool() & causal
+
+        # A row with nothing left to attend to makes softmax emit NaN, which spreads
+        # through the batch. Let every query see itself: for real positions the
+        # diagonal is set already, so this only affects all-padding rows, whose
+        # outputs the -100 labels discard anyway.
+        return keep | torch.eye(seq_len, dtype=torch.bool, device=device)
     
     def forward(self, input_ids, attention_mask=None):
         """

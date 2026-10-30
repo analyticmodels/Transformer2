@@ -2,8 +2,18 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.pytest_cache/
 
-# Virtual environment (this repo doubles as its own venv root)
+# Secrets -- never commit. Use .env.example as the committed template.
+.env
+.env.*
+!.env.example
+
+# Virtual environment
+.venv/
+
+# Dead Python 3.11 venv that was committed at the repo root (its interpreter no
+# longer exists on this machine; .venv/ replaces it)
 bin/
 include/
 lib/
@@ -17,7 +27,14 @@ pyvenv.cfg
 !.gitkeep
 
 # Trained tokenizer artifacts and their training corpus
-tokenizer/training_data.txt
+**/training_data.txt
 
 # Collected datasets
 data/*.parquet
+
+# Generated output
+checkpoints/
+outputs/
+
+# Cached Project Gutenberg downloads -- tens of GB, refetched on demand
+data/gutenberg_raw/

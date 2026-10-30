@@ -1,13 +1,19 @@
 import torch
-import os
-from coreTransformer import SmallTransformer
-from tokenizer import create_tokenizer
+from transformer2.model.transformer import SmallTransformer
+from transformer2.paths import checkpoint_dir, tokenizer_dir
+from transformer2.tokenization.bpe import create_tokenizer, read_tokenizer_meta
 
 # ollama_integration is imported lazily inside the use_ollama branches so that the
 # local inference path does not depend on it (or on `requests`) at all.
 
-# Set environment variables
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+# Note: this module deliberately does not set TOKENIZERS_PARALLELISM. Doing so at import
+# time is process-wide, and disabling it makes the batched tokenization in dataloader.py
+# roughly six times slower for anything that imports this module first (a notebook that
+# generates and then trains, for example). Inference encodes one prompt at a time and
+# forks nothing, so it gains nothing from the setting either way.
+
+DEFAULT_DATASET_TYPE = "bluesky"
+
 
 def infer_architecture(state_dict, config=None, num_heads_override=None):
     """
@@ -110,7 +116,7 @@ def infer_architecture(state_dict, config=None, num_heads_override=None):
         'max_seq_len': max_seq_len,
     }
 
-def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_type="bluesky",
+def load_model(model_path=None, model=None, tokenizer=None, dataset_type=None,
                use_ollama=False, ollama_model="llama2", num_heads=None):
     """
     Load a transformer model from checkpoint.
@@ -119,7 +125,8 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
         model_path (str): Path to the model checkpoint
         model (nn.Module, optional): Model to load weights into. If None, a new SmallTransformer will be created.
         tokenizer: Tokenizer to use. If None, a new tokenizer will be created.
-        dataset_type (str): Type of dataset the model was trained on.
+        dataset_type (str, optional): Corpus the model was trained on. Read off the
+            checkpoint when omitted.
         use_ollama (bool): Serve generation from a local Ollama model instead of a checkpoint.
         ollama_model (str): Name of the Ollama model to use when use_ollama is set.
         num_heads (int, optional): Override the attention head count recorded in the checkpoint.
@@ -130,22 +137,23 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
     Raises:
         RuntimeError: If the checkpoint cannot be read or its weights do not fit the model.
     """
+    model_path = str(model_path or checkpoint_dir() / "best_model.pt")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # For Ollama models, create the model and tokenizer directly
     if use_ollama:
-        from ollama_integration import OllamaModel, OllamaTokenizer
+        from transformer2.inference.ollama import OllamaModel, OllamaTokenizer
         if tokenizer is None:
             tokenizer = OllamaTokenizer(ollama_model)
         if model is None:
             model = OllamaModel(model_name=ollama_model)
         return model, tokenizer
 
-    # Create tokenizer if not provided
-    if tokenizer is None:
-        tokenizer = create_tokenizer(tokenizer_type="byte-level-bpe", dataset_type=dataset_type)
-    
-    # For local models, load the checkpoint to get model config
+    # Read the checkpoint before building the tokenizer: training records which corpus
+    # the model was trained on, so neither the caller nor the user has to know it.
+    # Defaulting to a fixed corpus instead meant every checkpoint from a different one
+    # failed the fingerprint check below and demanded a flag the checkpoint could have
+    # supplied itself.
     try:
         checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     except Exception as e:
@@ -153,6 +161,20 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
 
     if 'model_state_dict' not in checkpoint:
         raise RuntimeError(f"Checkpoint {model_path} has no 'model_state_dict' entry")
+
+    if dataset_type is None:
+        recorded = (checkpoint.get('config') or {}).get('tokenizer_dataset')
+        if recorded:
+            dataset_type = recorded
+            print(f"Checkpoint was trained with the '{dataset_type}' tokenizer.")
+        else:
+            dataset_type = DEFAULT_DATASET_TYPE
+            print(f"Checkpoint records no tokenizer; assuming '{dataset_type}'. "
+                  f"Pass --dataset_type if that is wrong.")
+
+    # Create tokenizer if not provided
+    if tokenizer is None:
+        tokenizer = create_tokenizer(dataset_type)
 
     state_dict = checkpoint['model_state_dict']
 
@@ -164,6 +186,21 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
             num_heads_override=num_heads
         )
 
+        # A matching vocabulary size proves nothing: every corpus in this project
+        # trains to 50000 tokens, so a Reddit tokenizer loads a Bluesky checkpoint
+        # without complaint and generates noise. Compare the recorded fingerprint.
+        recorded = (checkpoint.get('config') or {}).get('tokenizer_vocab_sha256')
+        if recorded:
+            actual_dir = tokenizer_dir(dataset_type)
+            actual = read_tokenizer_meta(actual_dir) or {}
+            if actual.get('vocab_sha256') and actual['vocab_sha256'] != recorded:
+                raise RuntimeError(
+                    f"Checkpoint {model_path} was trained with the "
+                    f"'{(checkpoint.get('config') or {}).get('tokenizer_dataset')}' tokenizer, "
+                    f"but {actual_dir} holds the '{actual.get('dataset')}' one. "
+                    f"Pass --dataset_type for the corpus this model was trained on."
+                )
+
         # The tokenizer has to agree with the embedding table. create_tokenizer silently
         # falls back to GPT-2 (50257 tokens) when tokenizer/vocab.json is missing, which
         # would otherwise surface as an opaque shape error from load_state_dict.
@@ -173,7 +210,7 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
                 f"Tokenizer vocabulary ({tokenizer_vocab_size} tokens) does not match "
                 f"checkpoint {model_path} ({architecture['vocab_size']} tokens). The "
                 f"tokenizer in tokenizer/ is not the one this model was trained with; "
-                f"regenerate it with: python tokenizer.py --dataset_type <dataset>"
+                f"regenerate it with: t2-tokenizer --dataset_type <dataset>"
             )
 
         model = SmallTransformer(dropout=0.1, **architecture)
@@ -198,7 +235,7 @@ def load_model(model_path='best_model.pt', model=None, tokenizer=None, dataset_t
 
 def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
                  top_k=50, top_p=0.9, repetition_penalty=1.2, model_path=None, debug=False,
-                 use_ollama=False, ollama_model="llama2", dataset_type="bluesky"):
+                 use_ollama=False, ollama_model="llama2", dataset_type=None):
     """
     Generate a continuation for a prompt.
 
@@ -359,7 +396,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7,
         print(f"Error decoding generated tokens: {e}")
         return ""
 
-def run_interactive_demo(model_path='best_model.pt', dataset_type="bluesky", use_ollama=False,
+def run_interactive_demo(model_path=None, dataset_type=None, use_ollama=False,
                          ollama_model="llama2", num_heads=None):
     """
     Run an interactive demo for text generation.
@@ -411,14 +448,14 @@ def run_interactive_demo(model_path='best_model.pt', dataset_type="bluesky", use
         except Exception as e:
             print(f"Error generating text: {e}")
 
-# Main function for CLI usage
-if __name__ == "__main__":
+def main():
+    """CLI entry point: generate from a prompt, or run the interactive demo."""
     import argparse
     
     parser = argparse.ArgumentParser(description='Text generation with transformer models')
-    parser.add_argument('--model_path', type=str, default='best_model.pt',
-                        help='Path to the model checkpoint (not used with --use_ollama)')
-    parser.add_argument('--dataset_type', type=str, default='bluesky',
+    parser.add_argument('--model_path', type=str, default=None,
+                        help='Model checkpoint (default: <checkpoints>/best_model.pt)')
+    parser.add_argument('--dataset_type', type=str, default=None,
                         help='Type of dataset the model was trained on (bluesky, reddit, imdb)')
     parser.add_argument('--use_ollama', action='store_true',
                         help='Use Ollama model instead of local transformer')
@@ -439,10 +476,29 @@ if __name__ == "__main__":
     parser.add_argument('--num_heads', type=int, default=None,
                         help='Override the attention head count recorded in the checkpoint '
                              '(needed for checkpoints written before the config fix)')
+    parser.add_argument('--params', type=str, default=None,
+                        help='JSON file of tuned sampling parameters from t2-tune. '
+                             'Values in it override the sampling flags above.')
+    parser.add_argument('--num_samples', type=int, default=1,
+                        help='Number of samples to generate for a single prompt')
     parser.add_argument('--debug', action='store_true',
                         help='Print debug information')
 
     args = parser.parse_args()
+
+    # Tuned parameters, if supplied, replace the sampling defaults. t2-tune writes
+    # this file; reading it here means the two commands hand off without a second
+    # generation script.
+    if args.params:
+        import json
+        with open(args.params) as handle:
+            best = json.load(handle)['best_params']
+        args.temperature = best.get('temperature', args.temperature)
+        args.top_k = best.get('top_k', args.top_k)
+        args.top_p = best.get('top_p', args.top_p)
+        args.repetition_penalty = best.get('repetition_penalty', args.repetition_penalty)
+        args.max_new_tokens = best.get('max_tokens', args.max_new_tokens)
+        print(f"Using tuned parameters from {args.params}: {best}")
 
     if args.prompt:
         # Single generation mode
@@ -454,22 +510,23 @@ if __name__ == "__main__":
             num_heads=args.num_heads
         )
 
-        generated = generate_text(
-            model,
-            tokenizer,
-            args.prompt,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            top_k=args.top_k,
-            top_p=args.top_p,
-            repetition_penalty=args.repetition_penalty,
-            debug=args.debug,
-            use_ollama=args.use_ollama,
-            ollama_model=args.ollama_model
-        )
-
         print(f"\nPrompt: {args.prompt}")
-        print(f"Generated: {args.prompt}{generated}")
+        for index in range(args.num_samples):
+            generated = generate_text(
+                model,
+                tokenizer,
+                args.prompt,
+                max_new_tokens=args.max_new_tokens,
+                temperature=args.temperature,
+                top_k=args.top_k,
+                top_p=args.top_p,
+                repetition_penalty=args.repetition_penalty,
+                debug=args.debug,
+                use_ollama=args.use_ollama,
+                ollama_model=args.ollama_model
+            )
+            label = f"Sample {index + 1}: " if args.num_samples > 1 else "Generated: "
+            print(f"{label}{args.prompt}{generated}")
     else:
         # Interactive demo mode
         run_interactive_demo(
@@ -479,3 +536,7 @@ if __name__ == "__main__":
             ollama_model=args.ollama_model,
             num_heads=args.num_heads
         )
+
+
+if __name__ == "__main__":
+    main()

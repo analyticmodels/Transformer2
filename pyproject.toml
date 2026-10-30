@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transformer2"
+version = "0.1.0"
+description = "A small decoder-only transformer, with the data and training tooling around it"
+requires-python = ">=3.11"
+dependencies = [
+    "torch==2.12.0",
+    "transformers==4.57.3",
+    "tokenizers==0.22.1",
+    "datasets==4.5.0",
+    "pandas==2.3.3",
+    "numpy==2.3.5",
+    "pyarrow==22.0.0",
+    "tqdm==4.69.0",
+    "requests==2.33.1",
+    "python-dotenv==1.2.3",
+    "praw==7.8.1",
+    "nltk==3.9.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[project.scripts]
+t2-collect = "transformer2.data.collection:main"
+t2-postprocess = "transformer2.data.postprocess:main"
+t2-tokenizer = "transformer2.tokenization.bpe:main"
+t2-train = "transformer2.training.trainer:main"
+t2-generate = "transformer2.inference.generate:main"
+t2-tune = "transformer2.inference.tuning:main"
+t2-demo = "transformer2.training.demo:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

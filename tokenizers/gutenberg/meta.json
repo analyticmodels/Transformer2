@@ -1,0 +1,7 @@
+{
+  "dataset": "gutenberg",
+  "vocab_size": 50000,
+  "min_frequency": 2,
+  "source": "/home/sean/repos/Transformer2/tokenizers/gutenberg/training_data.txt",
+  "vocab_sha256": "b0ca7fe393971f549e6325d57b570ae7d99015cdcbeb65c4833ee48c57a90d9d"
+}

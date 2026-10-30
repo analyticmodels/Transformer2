@@ -6,7 +6,7 @@ This script tests various combinations of inference parameters to find the optim
 settings for text generation quality.
 
 Usage:
-    python optimize_inference.py --prompt "Your prompt here" --metric ppl
+    t2-tune --prompt "Your prompt here" --metric ppl
 """
 
 import argparse
@@ -16,14 +16,29 @@ import numpy as np
 from tqdm import tqdm
 import time
 import json
-from inference import load_model, generate_text
+from transformer2.inference.generate import load_model, generate_text
+from transformer2.paths import ensure, output_dir
 
 # Optional: only import if available
 try:
     import nltk
     from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-    nltk.download('punkt', quiet=True)
-    HAS_NLTK = True
+
+    # Current NLTK tokenizes with punkt_tab; 'punkt' alone leaves word_tokenize
+    # raising LookupError. Probe rather than assume, so that a failed or offline
+    # download degrades to whitespace tokenization instead of failing every
+    # parameter combination with an error that looks empty.
+    for resource in ('punkt_tab', 'punkt'):
+        try:
+            nltk.download(resource, quiet=True)
+        except Exception:
+            pass
+    try:
+        nltk.word_tokenize("probe sentence.")
+        HAS_NLTK = True
+    except Exception:
+        print("NLTK data unavailable; falling back to whitespace tokenization.")
+        HAS_NLTK = False
 except ImportError:
     print("NLTK not installed. BLEU score calculation will be disabled.")
     print("If you want to use BLEU scores, install NLTK: pip install nltk")
@@ -219,7 +234,8 @@ def grid_search(prompt, model, tokenizer, params_grid, reference=None, num_sampl
             })
             
         except Exception as e:
-            print(f"Error with params (temp={temp}, top_k={top_k}, top_p={top_p}, rep_penalty={rep_penalty}): {e}")
+            print(f"Error with params (temp={temp}, top_k={top_k}, top_p={top_p}, "
+                  f"rep_penalty={rep_penalty}): {type(e).__name__}: {e}")
     
     # Sort results by score
     results.sort(key=lambda x: x['metrics']['score'], reverse=True)
@@ -231,16 +247,16 @@ def main():
                         help='Prompt to use for testing (default: "The future of AI is")')
     parser.add_argument('--reference', type=str, default=None,
                         help='Reference text to compare generation against (for BLEU score)')
-    parser.add_argument('--model_path', type=str, default='best_model.pt',
-                        help='Path to the model checkpoint')
-    parser.add_argument('--dataset_type', type=str, default='bluesky',
+    parser.add_argument('--model_path', type=str, default=None,
+                        help='Model checkpoint (default: <checkpoints>/best_model.pt)')
+    parser.add_argument('--dataset_type', type=str, default=None,
                         help='Type of dataset the model was trained on')
     parser.add_argument('--metric', type=str, default='combined', choices=['combined', 'ppl', 'diversity', 'length', 'bleu'],
                         help='Metric to optimize for')
     parser.add_argument('--num_samples', type=int, default=3,
                         help='Number of samples to generate for each parameter combination')
-    parser.add_argument('--output', type=str, default='inference_params.json',
-                        help='Output file to save best parameters')
+    parser.add_argument('--output', type=str, default=None,
+                        help='Output file for the best parameters (default: <outputs>/inference_params.json)')
     parser.add_argument('--temperature_min', type=float, default=0.5, help='Minimum temperature')
     parser.add_argument('--temperature_max', type=float, default=1.0, help='Maximum temperature')
     parser.add_argument('--temperature_steps', type=int, default=3, help='Number of temperature steps')
@@ -320,6 +336,12 @@ def main():
         print(f"   Generation time: {result['generation_time']:.3f}s")
         print(f"   Generated text: {args.prompt}{result['generated_text']}")
     
+    if not results:
+        raise RuntimeError(
+            "No parameter combination produced a result. Every generation attempt "
+            "failed -- rerun with a smaller grid to see the underlying error."
+        )
+
     # Save best parameters to file
     best_params = results[0]['params']
     
@@ -347,10 +369,11 @@ def main():
         'all_results': results[:10]  # Save top 10 results
     })
     
-    with open(args.output, 'w') as f:
+    output_path = ensure(args.output or output_dir() / 'inference_params.json')
+    with open(output_path, 'w') as f:
         json.dump(output_data, f, indent=2)
     
-    print(f"\nBest parameters saved to {args.output}")
+    print(f"\nBest parameters saved to {output_path}")
     print(f"Best parameters: temp={best_params['temperature']:.2f}, top_k={best_params['top_k']}, "
           f"top_p={best_params['top_p']:.2f}, rep_penalty={best_params['repetition_penalty']:.2f}")
     
